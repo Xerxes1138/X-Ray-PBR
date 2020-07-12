@@ -1,0 +1,42 @@
+#include "common.h"
+
+struct VertexOuput_Particle
+{
+	float4 vs_vertex			: POSITION;
+	float4 vs_positionScreen	: TEXCOORD0;
+	float2 vs_textureCoord		: TEXCOORD1;
+	float4 vs_vertexColor		: TEXCOORD2;
+	float3 vs_normalView : TEXCOORD3;
+};
+
+float4 	main	( VertexOuput_Particle Input )	: COLOR
+{
+	float2 positionScreen = Input.vs_positionScreen.xy / Input.vs_positionScreen.w;
+	int2 positionScreenScaled =  positionScreen * STALKER_SCREEN_SIZE.xy;
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, positionScreen);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, positionScreen);
+	float4 gBuffer2 = tex2D(s_diffuse, positionScreen);
+	float4 gBuffer3 = tex2D(s_depth, positionScreen);
+	//
+	
+	float4 c = tex2D(s_base, Input.vs_textureCoord);
+	
+	// sRGB
+	c = pow(c, 2.2f);
+	
+	c.rgb *= Input.vs_vertexColor.rgb;
+	
+	float3 diffuseIndirect = texCUBE(s_diffuse_s0, float3(Input.vs_textureCoord, 1));
+	
+	// ALPHA
+	c.a *= Input.vs_vertexColor.a;//saturate((c.a - Input.vs_vertexColor.a) / 1.0f);
+	
+	// SOFT PARTICLE
+	c.a *= saturate((gBuffer0.z - Input.vs_positionScreen.z));
+	
+	return c;
+}

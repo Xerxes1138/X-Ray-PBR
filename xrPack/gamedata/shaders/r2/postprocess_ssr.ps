@@ -1,0 +1,138 @@
+#include "common.h"
+#include "hmodel.h"
+
+uniform float4 dx_ScreenSize;
+
+struct 	v2p
+{
+	float4 tc0: 		TEXCOORD0;
+};
+
+void main 
+( 
+		v2p I,
+		out float4 outSSRRaycast : COLOR0
+)
+{
+	// COORD
+	float2 uv = I.tc0;
+	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	//
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_depth, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked =  1.0f /*data.occlusion*/;
+				
+	float materialID = data.materialID;
+	
+	float depth = data.depth;
+	
+	float linearDepth = LinearDepth(depth);
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	//
+	float3 positionWorld = mul(dx_matrix_CameraToWorld, float4(positionView, 1.0f));
+	float3 normalWorld = normalize(mul((float3x3)dx_matrix_CameraToWorld, normalView));
+	
+	//float roughness = pow(1.0f - smoothness * 0.7f, 6.0f);
+	float roughness = max(1.0f - smoothness, 0.01f);
+	
+	float3 cameraPositionWorld = eye_position;
+		
+	float3 viewDirectionWorld = normalize(positionWorld - cameraPositionWorld);
+	//
+
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (dx_ScreenSize.xy) / 1024);
+	
+	#ifdef STALKER_USE_STOCHASTIC_SSR
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+		
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+
+	#if 1
+		float3 viewRay = normalize(positionView);
+
+		float4 screenSpacePos  = float4(uv, depth, 1.0f);
+		
+		float2 Xi = blueNoise.xy;
+		//Xi.y = lerp(Xi.y, 0.0f, 0.75f); 
+
+		float4 H = TangentToWorld(normalView, ImportanceSampleGGX(Xi, roughness));
+
+
+	    //float4 H = TangentToWorld(normalView, CosineSampleHemisphere(Xi));
+
+		float3 reflectionVector = /*-H.xyz*/ normalize(-reflect(viewRay, H.xyz));
+
+		float3 screenSpaceReflectionVec = float3(reflectionVector.xy - positionView.xy  / positionView.z * reflectionVector.z, reflectionVector.z / positionView.z) * dx_Projection_Params.xyz;
+			
+		const int NUM_RAY_MARCH_SAMPLES = 40;
+		
+		const float SIZE_RAY_MARCH_STEPS = 0.01f /*(1.0f / ((float)NUM_RAY_MARCH_SAMPLES))*/;
+		
+		float reflectionRayMarchStep = SIZE_RAY_MARCH_STEPS;
+		reflectionRayMarchStep = reflectionRayMarchStep * (blueNoise.x + blueNoise.y) + reflectionRayMarchStep;
+
+		int hitFail = 0; 
+		float3 raySample = screenSpacePos;
+		
+		[unroll (NUM_RAY_MARCH_SAMPLES)]
+		for (int rayStepIdx = 0; rayStepIdx < NUM_RAY_MARCH_SAMPLES; rayStepIdx++)
+		{
+			float ZBufferVal = tex2Dlod(s_position, float4(raySample.xy,0,0)).w;
+					if(ZBufferVal <= 0 ) ZBufferVal = 1.0f;
+					
+			float delta = raySample.z - ZBufferVal;
+
+			float thickness = /*-dx_SSR_Projection.z*/ 0.01f / positionView.z;
+	
+			if (0.0f < delta && delta < thickness)
+			{
+				hitFail = 1;
+				break;
+			}
+
+			raySample += screenSpaceReflectionVec * reflectionRayMarchStep;
+
+			reflectionRayMarchStep *= 1.0f + SIZE_RAY_MARCH_STEPS; // Increase step size after each iteration
+		}
+	#endif
+
+    outSSRRaycast.xy = raySample.xy;
+    outSSRRaycast.z = 1.0f / H.w;
+    outSSRRaycast.w = (float) hitFail;
+}

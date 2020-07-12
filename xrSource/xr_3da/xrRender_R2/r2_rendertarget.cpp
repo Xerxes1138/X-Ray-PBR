@@ -265,7 +265,7 @@ CRenderTarget::CRenderTarget		()
 		u32	w = Device.dwWidth, h = Device.dwHeight;
 
 		// TODO : Change G-Buffer layout !
-		rt_Depth.create(r2_RT_depth, w, h, D3DFMT_A32B32G32R32F); 
+		rt_SpecularColor.create(r2_RT_depth, w, h, D3DFMT_A8R8G8B8); 
 		rt_Position.create(r2_RT_P,	w, h, D3DFMT_A32B32G32R32F);
 		rt_Normal.create(r2_RT_N, w, h, D3DFMT_A16B16G16R16F);
 
@@ -294,6 +294,7 @@ CRenderTarget::CRenderTarget		()
 		s_motionVector.create(b_motionVector);
 		g_motionVector.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
 
+
 		rt_Accumulator_SSGI.create	(r2_RT_accum_ssgi,w,h, D3DFMT_A16B16G16R16F);
 
 		// select albedo & accum
@@ -311,7 +312,8 @@ CRenderTarget::CRenderTarget		()
 				// NV40
 				rt_Color.create				(r2_RT_albedo,		w,h,D3DFMT_A16B16G16R16F);	// expand to full
 				rt_Accumulator.create		(r2_RT_accum,		w,h,D3DFMT_A16B16G16R16F);
-			} else 
+			} 
+			else 
 			{
 				// R4xx, no-fp-blend,-> albedo_wo
 				VERIFY						(RImplementation.o.albedo_wo);

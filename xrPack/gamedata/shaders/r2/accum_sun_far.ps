@@ -1,0 +1,109 @@
+#include "common.h"
+#include "lmodel.h"
+#include "shadow.h"
+
+#include "stalker_Shadows.h"
+
+#define SUN_FARPLANE 150.0f //dx_ProjectionParams.y
+
+sampler2D s_sun_lut;
+float4 Ldynamic_dir_w;
+
+#ifdef USE_SUNFILTER
+float4 main(AccumVertexOuput Input) : COLOR
+{
+	float4 positionView = tex2D(s_position, Input.tc);
+	positionView.w = 1.0f;
+	
+	float4 	PS	= mul		(m_shadow, 	positionView);
+	
+#ifdef 	USE_HWSMAP
+	half shadows  = sunmask(positionView) * sample_hw(PS,float4(0.0f, 0.0f, 0.0f, 0.0f));
+#else
+	half shadows  = sunmask(positionView) * sample_sw(PS.xy / PS.w, float2(0.0f, 0.0f), PS.z);
+#endif
+	return 	shadows;
+}
+#else
+#ifdef STALKER_CHECKERBOARD_RENDERING
+	float4 	main(AccumVertexOuput Input) : COLOR
+#else
+	void main 
+	( 
+		AccumVertexOuput Input,
+		out half4 outDiffuse : COLOR0,
+		out half4 outSpecular : COLOR1
+	)
+#endif
+{
+	// COORD
+	float2 uv = Input.tc;
+	int2 pos = uv * STALKER_SCREEN_SIZE;
+	//
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_depth, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked =  1.0f /*data.occlusion*/;
+				
+	float materialID = data.materialID;
+	
+	float depth = data.depth;
+	
+	float linearDepth = gBuffer0.z;//LinearDepthShadow(depth);
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	// BRDF
+	float3	diffuseDirect, specularDirect;
+	plight_infinity(diffuseDirect, specularDirect, specularColor, smoothness, positionView, normalView, Ldynamic_dir);
+
+	// SHADOWS
+  	float4 P4 = float4(positionView.xyz, 1.f);
+	float4 PS = mul(m_shadow, P4);
+	//float shadows = sunmask(P4);
+	
+	#ifdef	USE_HWSMAP
+		#ifdef USE_FETCH4
+			half shadows = sunmask(P4) * sample_hw_f4(PS, float4(0.0f, 0.0f, 0.0f, 0.0f));
+		#else
+			half shadows = sunmask(P4) * sample_hw_pcf(PS, float4(0.0f, 0.0f, 0.0f, 0.0f));
+		#endif
+	#else
+		half shadows = sunmask(P4) * sample_sw(PS.xy / PS.w, float2(0.0f, 0.0f), PS.z);
+	#endif
+	
+	/*#ifdef USE_SJITTER
+	  shadows *= shadow_jitter_sun(PS,Input.tc * STALKER_SCREEN_SIZE / 1024);
+	#else
+	  shadows *= shadow(PS);
+	#endif*/
+
+	#ifdef 	SUN_FARPLANE
+		float fade = saturate((positionView.z - SUN_FARPLANE) / 25.0f );
+		shadows	= lerp(shadows, 1.0f, (fade));
+	#endif
+	
+	float3 radiance = Ldynamic_color.rgb;
+	
+	outDiffuse = float4(diffuseDirect * radiance * shadows, 0.0f);
+	outSpecular = float4(specularDirect * radiance * shadows, 0.0f);
+}
+#endif

@@ -1,0 +1,87 @@
+#include "common.h"
+
+#include "shared\common.h"
+#include "shared\stalker_Core.h"
+#include "shared\stalker_Utils.h"
+
+uniform sampler2D s_currentColor;
+
+struct BloomVertexInput      
+{
+	float2 tc0	: TEXCOORD0;
+};
+
+float4 	main( BloomVertexInput Input ) : COLOR
+{
+	// COORD
+	float2 uv = Input.tc0;
+	int2 pos = uv * STALKER_SCREEN_SIZE;
+	
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+		
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+	
+	float3 currentColor = tex2D(s_currentColor, uv);
+	
+	#ifdef STALKER_USE_STOCHASTIC_BLOOM
+		const int stochasticTaps = 4;
+		
+		const float2 blueNoiseRand[stochasticTaps] = {blueNoise.xy , blueNoise.zw , float2(-blueNoise.y, blueNoise.x) , float2(-blueNoise.w, blueNoise.z)};
+	
+		float stochasticSum = 0.0f;
+		float3 stochasticBloom = 0.0f;
+		for (int k = 0; k < stochasticTaps; k++)
+		{
+			float dist = sqrt(blueNoiseRand[k].y); // Uniform
+			
+			if (1)
+				dist = pow((blueNoiseRand[k].y - 1), 2.0f); // Bloom
+					
+			float s, c;
+			float a = blueNoiseRand[k].x;
+			sincos(a * STALKER_TWO_PI, s, c);
+			float2 rot = float2(c, s);
+
+			float2 offset = rot * dist;
+			
+			offset *= (1.0f / STALKER_SCREEN_SIZE.xy) * 100.0f;
+			
+			float weight = 1.0f; // box
+			//float weight = stochasticTaps - abs(k) + 1; // triangle
+			//float weight = 1.0 / (1 + abs(k)); // pointy triangle
+			
+			float3 sampledColor = tex2D(s_bloom, uv + offset).rgb * weight;
+			
+			sampledColor /= 1 + sampledColor;
+			
+			
+			stochasticBloom += sampledColor;
+			stochasticSum += weight;
+		}
+		stochasticBloom = stochasticBloom / stochasticSum;
+		
+		stochasticBloom /= 1 - stochasticBloom;
+		
+		currentColor += stochasticBloom; 
+	#endif
+
+	return float4(currentColor, 1.0f);
+}

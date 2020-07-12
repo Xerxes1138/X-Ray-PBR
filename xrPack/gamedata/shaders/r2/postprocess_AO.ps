@@ -1,0 +1,328 @@
+#include "common.h"
+
+#include "shared\common.h"
+#include "shared\stalker_Core.h"
+#include "shared\stalker_Utils.h"
+
+#include "lmodel.h"
+#include "hmodel.h"
+
+uniform float4 dx_ScreenSize;
+
+float3 FetchNormal( const float2 uv)
+{
+
+	const float3 c = tex2D(s_position, uv).xyz;
+	const float3 r = tex2D(s_position, uv + half2( +1.0 , 0.0 ) * dx_ScreenSize.zw ).xyz;
+	const float3 l = tex2D(s_position, uv + half2( -1.0 , 0.0 ) * dx_ScreenSize.zw ).xyz;
+	const float3 t = tex2D(s_position, uv + half2(  0.0, +1.0 ) * dx_ScreenSize.zw ).xyz;
+	const float3 b = tex2D(s_position, uv + half2(  0.0, -1.0 ) * dx_ScreenSize.zw ).xyz;
+	const float3 vr = ( r - c ), vl = ( c - l ), vt = ( t - c ), vb = ( c - b );
+	const float3 min_horiz = ( dot( vr, vr ) < dot( vl, vl ) ) ? vr : vl;
+	const float3 min_vert = ( dot( vt, vt ) < dot( vb, vb ) ) ? vt : vb;
+	const float3 normalScreenSpace = normalize( cross( min_horiz, min_vert ) );
+
+	return float3( normalScreenSpace.x, normalScreenSpace.y, normalScreenSpace.z );
+}
+
+static const float3 points[] =
+{
+		float3(-0.134, 0.044, -0.825),
+		float3(0.045, -0.431, -0.529),
+		float3(-0.537, 0.195, -0.371),
+		float3(0.525, -0.397, 0.713),
+		float3(0.895, 0.302, 0.139),
+		float3(-0.613, -0.408, -0.141),
+		float3(0.307, 0.822, 0.169),
+		float3(-0.819, 0.037, -0.388),
+		float3(0.376, 0.009, 0.193),
+		float3(-0.006, -0.103, -0.035),
+		float3(0.098, 0.393, 0.019),
+		float3(0.542, -0.218, -0.593),
+		float3(0.526, -0.183, 0.424),
+		float3(-0.529, -0.178, 0.684),
+		float3(0.066, -0.657, -0.570),
+		float3(-0.214, 0.288, 0.188),
+		float3(-0.689, -0.222, -0.192),
+		float3(-0.008, -0.212, -0.721),
+		float3(0.053, -0.863, 0.054),
+		float3(0.639, -0.558, 0.289),
+		float3(-0.255, 0.958, 0.099),
+		float3(-0.488, 0.473, -0.381),
+		float3(-0.592, -0.332, 0.137),
+		float3(0.080, 0.756, -0.494),
+		float3(-0.638, 0.319, 0.686),
+		float3(-0.663, 0.230, -0.634),
+		float3(0.235, -0.547, 0.664),
+		float3(0.164, -0.710, 0.086),
+		float3(-0.009, 0.493, -0.038),
+		float3(-0.322, 0.147, -0.105),
+		float3(-0.554, -0.725, 0.289),
+		float3(0.534, 0.157, -0.250),
+};
+
+#define g_occlusion_radius 0.5f
+#define g_occlusion_max_distance 20.0f
+
+#define smp_position s_position
+#define smp_normal s_normal
+
+float4 dssdo_accumulate(float2 tex, float3 random)
+{
+	const int num_samples = 32;
+	
+	float3  center_pos  = tex2D(smp_position, tex).xyz;
+	//center_pos = mul(dx_matrix_CameraToWorld, float4(center_pos, 1.0f));
+	
+	float3 eye_pos = eye_position;
+
+	//float  center_depth = distance(eye_position, center_pos);
+	float  center_depth = length(center_pos);
+
+	float radius = g_occlusion_radius / center_depth;
+	float max_distance_inv = 1.0f / g_occlusion_max_distance;
+	float attenuation_angle_threshold = 0.1;
+
+	float3 noise = random;
+
+	//float3 center_normal = tex2D(smp_normal, tex).xyz;
+	float3 center_normal = FetchNormal(tex) /*cross(normalize(ddx(center_pos)), normalize(ddy(center_pos)))*/;
+	//center_normal = normalize(mul(dx_matrix_CameraToWorld, center_normal));
+	
+	float4 occlusion_sh2 = 0;
+
+	const float fudge_factor_l0 = 2.0;
+	const float fudge_factor_l1 = 10.0;
+
+	const float sh2_weight_l0 = fudge_factor_l0 * 0.28209; //0.5*sqrt(1.0/pi);
+	const float3 sh2_weight_l1 = fudge_factor_l1 * 0.48860; //0.5*sqrt(3.0/pi);
+
+	const float4 sh2_weight = float4(sh2_weight_l1, sh2_weight_l0) / num_samples;
+
+	for( int i=0; i<num_samples; ++i )
+	{
+	    float2 textureOffset = reflect( points[ i ].xy, noise.xy ).xy * radius;
+		
+		float2 sample_tex = tex + textureOffset;
+		float3 sample_pos = tex2Dlod(smp_position, float4(sample_tex,0,0)).xyz;
+		//sample_pos = mul(dx_matrix_CameraToWorld, float4(sample_pos, 1.0f));
+			
+		float3 center_to_sample = sample_pos - center_pos;
+		
+		float dist = length(center_to_sample);
+		float3 center_to_sample_normalized = center_to_sample / dist;
+
+		float attenuation = 1.0f - saturate(dist * max_distance_inv);
+
+		float dp = dot(center_normal, center_to_sample_normalized);
+
+		attenuation = attenuation * attenuation * step(attenuation_angle_threshold, dp);
+
+		occlusion_sh2 += attenuation * sh2_weight*float4(center_to_sample_normalized,1);
+	}
+
+	return occlusion_sh2;
+}
+
+float RayAttenBorder (float2 pos, float value)
+{
+	float borderDist = min(1.0 - max(pos.x, pos.y), min(pos.x, pos.y));
+	return saturate(borderDist > value ? 1.0 : borderDist / value);
+}
+
+struct 	v2p
+{
+	float4 tc0: 		TEXCOORD0;
+};
+
+void main 
+( 
+		v2p I,
+		out float4 outSSRRaycast : COLOR0
+)
+{
+	// COORD
+	float2 uv = I.tc0;
+	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	//
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_depth, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked =  1.0f /*data.occlusion*/;
+				
+	float materialID = data.materialID;
+	
+	float depth = data.depth;
+	
+	float linearDepth = data.position.z /*LinearDepth(depth)*/;
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	//
+	float3 positionWorld = mul(dx_matrix_CameraToWorld, float4(positionView, 1.0f));
+	float3 normalWorld = normalize(mul((float3x3)dx_matrix_CameraToWorld, normalView));
+	
+	//float roughness = pow(1.0f - smoothness * 0.7f, 6.0f);
+	float roughness = max(1.0f - smoothness, 0.01f);
+	
+	float3 cameraPositionWorld = eye_position;
+		
+	float3 viewDirectionWorld = normalize(positionWorld - cameraPositionWorld);
+	//
+
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (dx_ScreenSize.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(uv * (dx_ScreenSize.xy));
+	
+	#ifdef STALKER_USE_TAA
+		interleavedGradientNoise = fmod(interleavedGradientNoise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+	
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	
+	const float2 blueNoiseRand[4] = {blueNoise.xy , blueNoise.zw , float2(-blueNoise.y, blueNoise.x) , float2(-blueNoise.w, blueNoise.z)};
+	//
+
+	// CRYTEK SSAO
+	#ifdef STALKER_CRYTEK_SSAO
+		float2 screenTC = uv;
+			
+		float offsetScale = STALKER_CRYTEK_SSAO_SIZE;
+		
+		offsetScale = offsetScale * saturate(linearDepth / 3.5f) * (1.0f + linearDepth / 2.0f ); // Large at distance and small at close range
+		offsetScale *= 1.0f / linearDepth;
+		
+		float3 vRotation = float3(rotation, interleavedGradientNoise /*blueNoise.z*/);
+
+		float fSceneDepthP = linearDepth;
+
+		const float offsetScaleStep = 1 + 2.4 / STALKER_CRYTEK_SSAO_NUM_SAMPLES;
+		float3 vSamplePos = float3(0,0,0);
+		float Accessibility = 0;
+		for ( int ao=0; ao <( STALKER_CRYTEK_SSAO_NUM_SAMPLES / 8); ao++ )
+		for ( int x= -1; x<=1; x+=2)
+		for ( int y= -1; y<=1; y+=2)
+		for ( int z= -1; z<=1; z+=2)
+		{
+			
+			float3 vOffset = normalize( float3( x, y ,z )) * (offsetScale *= offsetScaleStep);
+			float3 vRotatedOffset = reflect(vOffset, vRotation);
+
+			vSamplePos = float3( screenTC.x, screenTC.y, fSceneDepthP );
+				
+			vSamplePos += float3( vRotatedOffset.xy, vRotatedOffset.z * fSceneDepthP * 2);
+
+			float fSceneDepthS = tex2Dlod(s_position, float4(vSamplePos.xy, 0, 0)).z;
+
+			float fRangeIsInvalid = saturate(((fSceneDepthP - fSceneDepthS) / fSceneDepthP));
+				
+			float occlusion = fSceneDepthS > vSamplePos.z;
+				
+			Accessibility += lerp(occlusion, 0.5f, fRangeIsInvalid);
+		}
+		Accessibility = Accessibility / STALKER_CRYTEK_SSAO_NUM_SAMPLES;
+		
+		outSSRRaycast.x = 0.5f;
+		outSSRRaycast.y = 0.5f;
+		outSSRRaycast.z = 1.0f;
+		outSSRRaycast.w = saturate(Accessibility * Accessibility + Accessibility * 2.0f);
+	#else
+		outSSRRaycast.xyz = dssdo_accumulate(uv, blueNoise).xyz;
+		outSSRRaycast.w = 1 - dssdo_accumulate(uv, blueNoise).w;
+	#endif
+
+	// EXPERIMENTAL !
+    #if 0
+		float3 viewRay = normalize(positionView);
+
+		float4 screenSpacePos  = float4(uv, depth, 1.0f);
+		
+		float3 raySample = screenSpacePos;
+		
+		float hitPDF = 0.0f;
+		int hitFail = 1;
+		for (int k = 0; k < 1; k++)
+		{
+			
+		
+		float2 Xi = /*hammersley2d(k, 4)*/ blueNoiseRand[k].xy;
+
+        float3 L = viewRay /*Ldynamic_dir.xyz + (-normalView)*/;
+
+        float4 samplePoint = float4(hemisphereSample_cos(Xi.x, Xi.y), 1.0f);
+
+        float4 H = TangentToWorld(L, samplePoint);
+		
+		hitPDF = H.w;
+		
+        float3 rayDir = /*reflect(viewRay, H.xyz)*/ H.xyz /** STALKER_STOCHASTIC_SSAO_LENGTH*/;
+
+		float3 screenSpaceReflectionfloat = float3(rayDir.xy - positionView.xy  / positionView.z * rayDir.z, rayDir.z / positionView.z) * dx_Projection_Params.xyz;
+			
+		const int NUM_RAY_MARCH_SAMPLES = 24;
+		
+        const float SIZE_RAY_MARCH_STEPS = (STALKER_STOCHASTIC_SSAO_LENGTH / ((float) NUM_RAY_MARCH_SAMPLES)) * 0.5f;
+		
+		float reflectionRayMarchStep = SIZE_RAY_MARCH_STEPS;
+		reflectionRayMarchStep = reflectionRayMarchStep * (blueNoise.x + blueNoise.y) + reflectionRayMarchStep;
+	
+		[unroll (NUM_RAY_MARCH_SAMPLES)]
+		for (int rayStepIdx = 0; rayStepIdx < NUM_RAY_MARCH_SAMPLES; rayStepIdx++)
+		{
+			float ZBufferVal = tex2Dlod(s_position, float4(raySample.xy,0,0)).w;
+					if(ZBufferVal <= 0 ) ZBufferVal = 1.0f;
+					
+			float delta = raySample.z - ZBufferVal;
+
+        float thickness =  STALKER_STOCHASTIC_SSAO_THICKNESS / linearDepth;
+	
+			if (0.0f < delta && delta < thickness)
+			{
+				hitFail = 0;
+				break;
+			}
+
+			raySample += screenSpaceReflectionfloat * reflectionRayMarchStep;
+
+			reflectionRayMarchStep *= 1.0f + SIZE_RAY_MARCH_STEPS; // Increase step size after each iteration
+		}
+		}
+
+		outSSRRaycast.xy = raySample.xy;
+		outSSRRaycast.z = 1.0f / hitPDF;
+		outSSRRaycast.w = saturate((float)hitFail);
+    #endif
+}

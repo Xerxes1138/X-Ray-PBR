@@ -1,0 +1,117 @@
+#include "common.h"
+#include "stalker_SurfaceData.h"
+
+sampler2D s_rain_puddle;
+ 
+void main  
+( 
+	VertexOutput_GBUFFER Input,
+    out float4 outGBuffer0 : COLOR0, // rgb = View position, a = mat ID
+    out float4 outGBuffer1 : COLOR1, // rgb = View normal, a = smoothness
+	out float4 outGBuffer2 : COLOR2, 	// rgb = Albedo, a = baked lighting
+	out float4 outGBuffer3 : COLOR3 	// rgb = Specular, a = baked lighting
+)
+{
+    SurfaceData surfaceData = surfaceDataOutput(Input);  
+	
+    // TODO : Add dither steps for clipped alpha
+#ifdef USE_AREF
+		float2 positionScreen = Input.vs_positionScreen.xy / Input.vs_positionScreen.w;
+		int2 positionScreenScaled =  positionScreen * STALKER_SCREEN_SIZE.xy;
+		
+		float interleavedGradientNoise = InterleavedGradientNoise(positionScreenScaled);
+		
+		#ifdef STALKER_USE_TAA
+			interleavedGradientNoise = fmod(interleavedGradientNoise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		#endif
+	
+		clip(surfaceData.base.w - interleavedGradientNoise /* def_aref*/);
+#endif
+
+    float smoothness = surfaceData.gloss;
+    float3 albedo = surfaceData.base.xyz;
+	
+    float3 positionView = Input.vs_positionView.xyz;
+	
+#ifdef USE_TBUMP
+    float3 normalView = normalize(mul(float3x3(Input.vs_tangentView, Input.vs_binormalView, Input.vs_normalView), surfaceData.normal));
+#else
+    float3 normalView = normalize(Input.vs_normalView.xyz);
+#endif
+
+    float ms = xmaterial;
+	
+/*#ifdef _MATERIAL_MODEL_SSSSS
+		ms = 12;
+#endif*/
+	
+#ifdef USE_LM_HEMI
+	float4 lm = tex2D(s_hemi, Input.lmh);
+	float h = dot(lm.rgb, 1.0f / 3.0f);
+#ifdef USE_R2_STATIC_SUN
+				ms 	= lm.w;
+#endif
+#else
+    float h = Input.vs_positionView.w;
+#ifdef USE_R2_STATIC_SUN
+		ms = Input.tcdh.w;
+#endif
+#endif
+
+	#ifdef STALKER_USE_LEGACY_RAIN
+		#ifdef USE_TBUMP
+			float3 normalWater = normalize(mul(float3x3(Input.vs_tangentView, Input.vs_binormalView, Input.vs_normalView), float3(0.0f, 0.0f, 1.0f)));
+		#else
+			float3 normalWater = normalView;
+		#endif
+
+			float slope = saturate(Input.vs_normalWorld.y);
+			
+			float smoothnessWater = 0.98f;
+
+			float wetSource = 1.0f - tex2D(s_rain_puddle, Input.vs_positionWorldAndDepth.xy / 40);
+
+			float wet = dx_WeatherParams.x * slope;
+			float flood = dx_WeatherParams.x * slope;
+			float puddle = 0.0f;
+			
+			// Get depth/accumulation water information
+			float2 accumulatedWaters = 0.0f;
+			// Get the "size" of the accumulated water in a hole/cracks
+			accumulatedWaters.x = min(flood, 1.0f - surfaceData.height);
+			// Get the size of the accumlated water in puddle taking into account the 
+			// marging (0.4 constant here)
+			accumulatedWaters.y = saturate((puddle - wetSource) / 0.4f);
+			// Mix vertex color and height map accumulated water by taking the higher
+			float accumulatedWater = max(accumulatedWaters.x, accumulatedWaters.y);
+
+			// WetLevel could be 0 but we can still require to have wet surface
+			// if there is accumulated water.
+			float newWetLevel = saturate(wet + accumulatedWater) /* slope*/;
+
+			float metallic = 0.0f; //saturate((dot(0.04f, 0.33f) * 1000 - 500));
+
+			// Calculate the surface wet BRDF parameters for the new wet level
+			//DoWetProcess(albedo, smoothness, metallic, newWetLevel);
+			//albedo = accumulatedWater;
+					
+			//smoothness = lerp(smoothness, smoothnessWater, accumulatedWater);
+
+			//normalView = lerp(normalView, normalWater, accumulatedWater);			
+	#endif
+
+    GBufferData data;
+    data.position = positionView /*+ normalView * surfaceData.height * def_virtualh / 2.0f*/;
+    data.normal = normalView;
+    data.diffuseColor = albedo;
+
+    data.specularColor = surfaceData.specularColor;
+	
+    data.materialID = ms;
+    data.smoothness = smoothness;
+    data.occlusion = (h) * surfaceData.occlusion;
+
+    data.depth = (Input.vs_positionWorldAndDepth.z / Input.vs_positionWorldAndDepth.w);
+
+    DataToGBuffer(data, outGBuffer0, outGBuffer1, outGBuffer2, outGBuffer3);
+}

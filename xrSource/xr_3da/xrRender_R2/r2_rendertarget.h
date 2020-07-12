@@ -38,20 +38,23 @@ public:
 #endif
 
 	// MRT-path
-	ref_rt						rt_Depth;			// Z-buffer like - initial depth
-	ref_rt						rt_Position;		// 64bit,	fat	(x,y,z,?)				(eye-space)
-	ref_rt						rt_Normal;			// 64bit,	fat	(x,y,z,hemi)			(eye-space)
-	ref_rt						rt_Color;			// 64/32bit,fat	(r,g,b,specular-gloss)	(or decompressed MET-8-8-8-8)
+
+	ref_rt						rt_Position;
+	ref_rt						rt_Normal;
+	ref_rt						rt_Color;
+	ref_rt						rt_SpecularColor;
 
 	ref_rt						rt_AO;
 
 	// 
-	ref_rt						rt_Accumulator;		// 64bit		(r,g,b,specular)
-	ref_rt						rt_Accumulator_SSGI;		// 64bit		(r,g,b,specular)
-	ref_rt						rt_AccumulatorSpecular;		// 64bit		(r,g,b,specular)
-	ref_rt						rt_Accumulator_temp;// only for HW which doesn't feature fp16 blend
+	ref_rt						rt_Accumulator;
 
-	ref_rt						rt_SSR_Raycast;		// SSR resolve
+	ref_rt						rt_Accumulator_SSGI;
+	ref_rt						rt_AccumulatorSpecular;
+
+	ref_rt						rt_Accumulator_temp;
+
+	ref_rt						rt_SSR_Raycast;
 
 	ref_rt						rt_currentColor;
 	ref_rt						rt_previousColor;

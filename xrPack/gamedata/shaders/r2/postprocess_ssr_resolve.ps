@@ -1,0 +1,102 @@
+#include "common.h"
+
+uniform sampler2D s_SSR_Raycast;
+uniform sampler2D s_currentColor;
+uniform sampler2D s_previousColor;
+
+float RayAttenBorder (float2 pos, float value)
+{
+	float borderDist = min(1.0 - max(pos.x, pos.y), min(pos.x, pos.y));
+	return saturate(borderDist > value ? 1.0 : borderDist / value);
+}
+
+struct 	v2p
+{
+  float4 tc0: 		TEXCOORD0;
+};
+
+float4 	main		( v2p I )	: COLOR
+{
+	// COORD
+	float2 uv = I.tc0;
+	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	//
+
+    float3 currentColor = tex2D(s_currentColor, uv);
+
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_depth, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked =  1.0f /*data.occlusion*/;
+				
+	float materialID = data.materialID;
+	
+	float depth = data.depth;
+	
+    float linearDepth = data.position.z;//LinearDepth(depth);
+		
+    float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	//
+	float3 positionWorld = mul(dx_matrix_CameraToWorld, float4(positionView, 1.0f));
+	float3 normalWorld = normalize(mul((float3x3)dx_matrix_CameraToWorld, normalView));
+	
+	//float roughness = pow(1.0f - smoothness * 0.7f, 6.0f);
+	float roughness = max(1.0f - smoothness, 0.01f);
+	
+	float3 cameraPositionWorld = eye_position;
+		
+	float3 viewDirectionWorld = normalize(positionWorld - cameraPositionWorld);
+	//
+
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * STALKER_SCREEN_SIZE.xy / 1024);
+	
+	#ifdef STALKER_USE_STOCHASTIC_SSR
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+		
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+
+	#if 1
+		float4 ssrResolveColor = 0.0;
+		float4 hitPacked = tex2Dlod(s_SSR_Raycast, float4(uv, 0.0, 0.0));
+		float2 hitUv = hitPacked.xy;
+		float hitFail = hitPacked.w;  
+
+		ssrResolveColor.rgb = tex2Dlod(s_currentColor, float4(hitUv, 0, 0)).rgb;
+        ssrResolveColor.a = hitFail * RayAttenBorder(hitUv, STALKER_STOCHASTIC_SSR_ATTEN_BORDER);
+	#endif
+
+    return max(1e-5f, float4(ssrResolveColor.rgb, ssrResolveColor.a));
+}

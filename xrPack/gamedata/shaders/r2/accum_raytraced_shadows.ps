@@ -1,0 +1,267 @@
+#include "common.h"
+
+#include "shared\common.h"
+#include "shared\stalker_Core.h"
+#include "shared\stalker_Utils.h"
+
+#include "lmodel.h"
+#include "hmodel.h"
+#include "fmodel.h"
+
+float RayAttenBorder (float2 pos, float value)
+{
+	float borderDist = min(1.0 - max(pos.x, pos.y), min(pos.x, pos.y));
+	return saturate(borderDist > value ? 1.0 : borderDist / value);
+}
+
+#if 1
+
+#ifdef STALKER_CHECKERBOARD_RENDERING
+half4  main  (AccumVertexOuput I) : COLOR
+#else
+	void main 
+	( 
+		AccumVertexOuput I,
+		out half4 outIndirectDiffuse : COLOR0,
+		out half4 outIndirectSpecular : COLOR1
+	)
+#endif
+{
+	// COORD
+    half2 uv = I.tc;
+	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_depth, uv);
+		if(gBuffer3.w <= 0 ) gBuffer3.w = 1.0f;
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked = data.occlusion;
+				
+	float materialID = data.materialID;
+	
+	float depth = data.depth;
+	
+	float linearDepth = LinearDepth(depth);
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+		
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+
+    float shadows = 1.0f;
+    #ifdef STALKER_USE_SSRS_SUN
+		float4 screenSpacePos  = float4(uv, depth, 1.0f);
+
+        float3 L = Ldynamic_dir.xyz;
+
+		float3 screenSpaceReflectionVec = float3(L.xy - positionView.xy  / positionView.z * L.z, L.z / positionView.z) * dx_Projection_Params.xyz;
+			
+		const int NUM_RAY_MARCH_SAMPLES = 12;
+		
+		const float SIZE_RAY_MARCH_STEPS = (dx_SSRS_Params.x / ((float)NUM_RAY_MARCH_SAMPLES));
+		
+		float reflectionRayMarchStep = SIZE_RAY_MARCH_STEPS;
+		reflectionRayMarchStep = reflectionRayMarchStep * (blueNoise.x + blueNoise.y) + reflectionRayMarchStep;
+
+		float3 raySample = screenSpacePos;
+		int hitFail = 1; 
+		[unroll (NUM_RAY_MARCH_SAMPLES)]
+		for (int rayStepIdx = 0; rayStepIdx < NUM_RAY_MARCH_SAMPLES; rayStepIdx++)
+		{
+			float ZBufferVal = tex2Dlod(s_depth, float4(raySample.xy,0,0)).w;
+					if(ZBufferVal <= 0 ) ZBufferVal = 1.0f;
+					
+			float delta = raySample.z - ZBufferVal;
+
+			float thickness = 0.005f / linearDepth;
+	
+			if (0.0f < delta && delta < thickness)
+			//if (abs(thickness - delta) < thickness)
+			{
+				hitFail = 0;
+				break;
+			}
+
+			raySample += screenSpaceReflectionVec * reflectionRayMarchStep;
+
+			//reflectionRayMarchStep *= 1.0f + SIZE_RAY_MARCH_STEPS; // Increase step size after each iteration
+		}
+
+		shadows *= lerp(1.0f, hitFail, RayAttenBorder(raySample.xy, 0.0125f));
+
+    #endif
+
+	#ifdef STALKER_CHECKERBOARD_RENDERING
+		bool checkerboard = ComputeCheckerboard(pos);
+		
+		float3 color = checkerboard ? hitFail : hitFail;
+		return float4(color, 1.0f);
+	#else
+        outIndirectDiffuse = float4((float3)shadows, 1.0f);
+        outIndirectSpecular = float4((float3)shadows, 1.0f);
+	#endif
+}
+#else
+#ifdef STALKER_CHECKERBOARD_RENDERING
+half4  main  (AccumVertexOuput I) : COLOR
+#else
+	void main 
+	( 
+		AccumVertexOuput I,
+		out half4 outIndirectDiffuse : COLOR0,
+		out half4 outIndirectSpecular : COLOR1
+	)
+#endif
+{
+	// COORD
+    half2 uv = I.tc;
+	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_depth, uv);
+		if(gBuffer3.w <= 0 ) gBuffer3.w = 1.0f;
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked = data.occlusion;
+				
+	float materialID = data.materialID;
+	
+	float depth = data.depth;
+	
+	float linearDepth = data.position.z;
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos, 0.0f);
+	
+	#ifdef STALKER_USE_TAA
+		interleavedGradientNoise = fmod(interleavedGradientNoise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+	
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+
+    float shadows = 1.0f;
+    #ifdef STALKER_USE_SSRS_SUN
+		float rayLength = dx_SSRS_Params.x;
+		float3 rayPos = positionView;
+        float3 rayDir = -normalize(Ldynamic_dir.xyz);
+
+		const int NUM_RAY_MARCH_SAMPLES = 12;
+		
+		const float SIZE_RAY_MARCH_STEPS = (rayLength / ((float)NUM_RAY_MARCH_SAMPLES));
+		
+		float reflectionRayMarchStep = SIZE_RAY_MARCH_STEPS;
+		reflectionRayMarchStep = reflectionRayMarchStep * (interleavedGradientNoise) + reflectionRayMarchStep;
+
+		float3 rayUV = 0.0f;
+		
+		int hitFail = 0; 
+		[unroll (NUM_RAY_MARCH_SAMPLES)]
+		for (int rayStepIdx = 0; rayStepIdx < NUM_RAY_MARCH_SAMPLES; rayStepIdx++)
+		{
+		
+			rayPos += rayDir * reflectionRayMarchStep;
+			
+			float4 projectedCoords  = mul(dx_matrix_Projection, float4(rayPos, 1.0f));
+			projectedCoords.xyz	/= projectedCoords.w;
+			projectedCoords.xy = projectedCoords.xy * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+	
+			rayUV = projectedCoords.xyz;
+				
+			float ZBufferVal = tex2Dlod(s_position, float4(rayUV.xy,0,0)).z;
+				if(ZBufferVal <= 0 ) ZBufferVal = dx_Viewport_Params.y;
+				
+			float delta = rayPos.z - ZBufferVal;
+
+			float thickness = 0.01f;
+
+			if (abs(thickness - delta) < thickness)
+			{
+				hitFail = 1;
+				break;
+			}
+		}
+
+		shadows *= lerp(1.0f, 1.0f - hitFail, RayAttenBorder(rayUV.xy, 0.0125f));
+    #endif
+
+	#ifdef STALKER_CHECKERBOARD_RENDERING
+		bool checkerboard = ComputeCheckerboard(pos);
+		
+		float3 color = checkerboard ? hitFail : hitFail;
+		return float4(color, 1.0f);
+	#else
+        outIndirectDiffuse = float4((float3)shadows, 1.0f);
+        outIndirectSpecular = float4((float3)shadows, 1.0f);
+	#endif
+}
+
+#endif

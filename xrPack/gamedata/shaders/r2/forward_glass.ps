@@ -1,0 +1,29 @@
+#include "common.h"
+
+uniform sampler2D		s_sceneColor;
+
+void main 
+( 
+	VertexOuput Input,
+    out float4 outGBuffer0 : COLOR0
+)
+{
+	float2 screenUV = Input.vs_screenPos.xy / Input.vs_screenPos.w;
+	float2 uv = Input.vs_textureUV;
+	
+	float noise = InterleavedGradientNoise(screenUV * STALKER_SCREEN_SIZE, 0.0f);
+
+	#ifdef STALKER_USE_TAA
+		noise = fmod(noise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+
+	float4 albedo = tex2D(s_base, uv);
+	//clip(albedo.a - noise /* 0.5f*/);
+	
+	float3 positionView = Input.vs_positionView;
+	float3 normalView = normalize(Input.vs_normalView);
+	
+	float3 sceneColor = tex2D(s_sceneColor, screenUV).rgb * albedo.rgb;
+		
+	outGBuffer0 = float4(sceneColor, 1.0f);
+}

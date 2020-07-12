@@ -1,0 +1,15 @@
+#include "common.h"
+#include "lmodel.h"
+#include "shadow.h"
+
+#include "stalker_Shadows.h"
+
+struct 	_input
+{
+	float2 	tc 	: TEXCOORD0;
+};
+
+float4 	main	( _input I ) : COLOR
+{
+	return 1.0f;
+}

@@ -1,0 +1,39 @@
+#include "common.h"
+
+void main 
+( 
+	VertexOuput Input,
+    out float4 outGBuffer0 : COLOR0,    // rgb = View position,  a = Depth - FP32
+    out float4 outGBuffer1 : COLOR1,    // rgb = View normal, a = mat ID - FP16
+	out float4 outGBuffer2 : COLOR2,    // rgb = Diffuse albedo, a = baked lighting - A8R8G8B8
+	out float4 outGBuffer3 : COLOR3     // rgb = Specular albedo, a = smoothness - A8R8G8B8
+)
+{
+	float2 screenUV = Input.vs_screenPos.xy / Input.vs_screenPos.w;
+	float2 uv = Input.vs_textureUV;
+	
+	float noise = InterleavedGradientNoise(screenUV * STALKER_SCREEN_SIZE.xy);
+
+	#ifdef STALKER_USE_TAA
+		noise = fmod(noise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+
+	float4 albedo = tex2D(s_base, uv);
+	clip(albedo.a - noise /* 0.5f*/);
+	
+	float3 positionView = Input.vs_positionView;
+	float3 normalView = normalize(Input.vs_normalView);
+	
+	GBufferData data;
+	data.position = positionView;
+	data.normal = normalView;
+	data.diffuseColor = albedo.rgb;
+	data.specularColor = (float3)0.04f;
+	
+	data.materialID					= xmaterial;
+	data.smoothness					= 0.0f;
+	data.occlusion					= 1.0f;
+	data.depth						= Input.vs_position.z / Input.vs_position.w;
+	
+	DataToGBuffer(data, outGBuffer0, outGBuffer1, outGBuffer2, outGBuffer3);
+}

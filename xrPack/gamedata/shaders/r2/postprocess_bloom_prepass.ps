@@ -1,0 +1,47 @@
+#include "common.h"
+
+#include "shared\common.h"
+#include "shared\stalker_Core.h"
+#include "shared\stalker_Utils.h"
+
+uniform sampler2D s_currentColor;
+
+struct BloomVertexInput      
+{
+	float2 tc0	: TEXCOORD0;
+};
+
+float4 	main( BloomVertexInput Input ) : COLOR
+{
+	// COORD
+	float2 uv = Input.tc0;
+	int2 pos = uv * STALKER_SCREEN_SIZE;
+	
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+		
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+	
+	float3 currentColor = tex2D(s_currentColor, uv);
+	
+	currentColor = max(1e-5f, currentColor - 0.2f);
+
+	return float4(currentColor, 1.0f);
+}

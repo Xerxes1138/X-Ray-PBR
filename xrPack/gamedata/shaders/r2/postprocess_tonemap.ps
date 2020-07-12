@@ -1,0 +1,140 @@
+#include "common.h"
+
+#include "shared\common.h"
+#include "shared\stalker_Core.h"
+#include "shared\stalker_Utils.h"
+
+#define USE_DISTORT	//- shader defined
+#define	EPSDEPTH 1e-5f
+
+uniform sampler2D s_motionVector;
+uniform sampler2D s_currentColor;
+uniform sampler2D s_distort;
+uniform sampler2D s_accumulator_ssgi;
+struct TonemapVertexInput      
+{
+	float2 tc0	: TEXCOORD0;
+};
+
+float4 	main( TonemapVertexInput I ) : COLOR
+{
+	// COORD
+    float2 uv = I.tc0;
+	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+		
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+
+    float3 currentColor = tex2D(s_currentColor, uv);
+
+    #ifdef USE_DISTORT
+  	    float depth = tex2D(s_position, uv).z;
+	    float4 distort = tex2D(s_distort, uv);
+
+	    float2 offset = (distort.xy - 0.5f) * def_distort;
+
+	    //float depth_x = tex2D(s_position, uv + offset).z;
+
+	    float3 refractedColor = tex2D(s_currentColor, uv + offset);
+ 
+        // This should be done inside the particle itself, it should be depthFromBehindTransparentObject < depthOfTransparentObject
+        /*if((depth_x + EPSDEPTH) < depth)
+            refractedColor = tex2D(s_currentColor, uv);*/
+
+        currentColor = refractedColor;
+     #endif
+    
+    float4 bloom = tex2D(s_bloom, uv);
+    
+    currentColor += max(1e-5f, bloom.rgb /* bloom.a*/);
+
+	#if 0
+		const int stochasticTaps = 4;
+		
+		const float2 blueNoiseRand[stochasticTaps] = {blueNoise.xy , blueNoise.zw , float2(-blueNoise.y, blueNoise.x) , float2(-blueNoise.w, blueNoise.z)};
+	
+		float stochasticSum = 0.0f;
+		float3 stochasticBlur = 0.0f;
+		for (int k = 0; k < stochasticTaps; k++)
+		{
+			float dist = sqrt(blueNoiseRand[k].y); // Uniform
+			
+			if (1)
+				dist = pow((blueNoiseRand[k].y - 1), 2.0f); // Bloom
+			
+			float s, c;
+			float a = blueNoiseRand[k].x;
+			sincos(a * STALKER_TWO_PI, s, c);
+			float2 rot = float2(c, s);
+
+			offset += rot * dist * STALKER_SCREEN_SIZE.zw * 25.0f /* (distort.a - 0.5f)*/;
+			
+			float weight = 1.0f; // box
+			//float weight = stochasticTaps - abs(k) + 1; // triangle
+			//float weight = 1.0 / (1 + abs(k)); // pointy triangle
+			
+			stochasticBlur += tex2D(s_currentColor, uv + offset).rgb * weight;
+			stochasticSum += weight;
+		}
+		stochasticBlur = stochasticBlur / stochasticSum;
+
+        currentColor += stochasticBlur;
+	#endif
+
+	// TONE-MAPPING CURVE
+	#ifndef STALKER_DEBUG_COMBINE_PASS
+		#ifdef STALKER_USE_TONEMAP
+			#ifdef STALKER_TONEMAP_HABLE 
+				//currentColor = accurateSRGBToLinear(currentColor);
+				
+				//Hable Curve
+				const float A = 0.15f;
+				const float B = 0.50f;
+				const float C = 0.10f;
+				const float D = 0.20f;
+				const float E = 0.02f;
+				const float F = 0.30f;
+				const float W = 11.2f;
+							
+				float3 x = STALKER_TONEMAP_BIAS * currentColor;
+				float3 curr = ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+							
+				x = W;
+				float3 whiteScale = 1.0f / (((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F);
+				
+				currentColor = curr * whiteScale;
+			#else
+				currentColor = ACESFitted(currentColor * STALKER_TONEMAP_BIAS);
+			#endif
+		#endif
+	#endif
+	//
+	
+	// sRGB
+	currentColor = accurateLinearToSRGB(currentColor);
+
+    // LUT
+    // LUT code should be here
+    //
+	
+	return  float4(currentColor + blueNoise.w / 255.0f, 1.0f);
+}

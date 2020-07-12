@@ -1,0 +1,129 @@
+#include "common.h"
+
+#include "shared\common.h"
+#include "shared\stalker_Core.h"
+#include "shared\stalker_Utils.h"
+
+#include "lmodel.h"
+#include "hmodel.h"
+
+static const float2 offset[4] =
+{
+	float2(0, 0),
+	float2(2, -2),
+	float2(-2, -2),
+	float2(0, 2)
+};
+
+
+float RayAttenBorder (float2 pos, float value)
+{
+	float borderDist = min(1.0 - max(pos.x, pos.y), min(pos.x, pos.y));
+	return saturate(borderDist > value ? 1.0 : borderDist / value);
+}
+
+#ifdef STALKER_CHECKERBOARD_RENDERING
+float4  main  (AccumVertexOuput I) : COLOR
+#else
+	void main 
+	( 
+		AccumVertexOuput I,
+		out float4 outIndirectDiffuse : COLOR0,
+		out float4 outIndirectSpecular : COLOR1
+	)
+#endif
+{
+	// COORD
+    float2 uv = I.tc;
+	uint2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_depth, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked = data.occlusion;
+				
+	float materialID = data.materialID;
+	
+	float depth = data.depth;
+	
+	float linearDepth = LinearDepth(depth);
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	//
+	float3 positionWorld = mul(dx_matrix_CameraToWorld, float4(positionView, 1.0f));
+	float3 normalWorld = normalize(mul((float3x3)dx_matrix_CameraToWorld, normalView));
+	
+	//float roughness = pow(1.0f - smoothness * 0.7f, 6.0f);
+	float roughness = max(1.0f - smoothness, 0.01f);
+	
+	float3 cameraPositionWorld = eye_position;
+		
+	float3 viewDirectionWorld = normalize(positionWorld - cameraPositionWorld);
+	//
+
+	float NdotV = saturate(dot(normalWorld, -viewDirectionWorld));
+	
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+	
+	#ifdef STALKER_USE_TAA
+		interleavedGradientNoise = fmod(interleavedGradientNoise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+	
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+		
+	ambientOcclusionBaked = 1.0f; //pow(ambientOcclusionBaked, 1.0f / 2.2f);//lerp(0.2f, 1.0f,ambientOcclusionBaked);
+	
+	float4 ssgi = tex2D(s_AO, uv);
+
+	float ssao = pow(saturate(ssgi.a), 2.2f);
+
+	#ifdef STALKER_BAKED_LIGHTING_SSAO_MIN_BLENDING
+		float ambientOcclusion = min(ambientOcclusionBaked, ssao); // SIGGRAPH 2014 - Moving Frostbite to Physically Based Rendering, Lagarde-deRousiers
+	#else
+		float ambientOcclusion = ambientOcclusionBaked * ssao;
+	#endif
+
+
+	// IBL
+    float3 diffuseIndirect, specularIndirect;
+	ComputeImageBasedLighting(diffuseIndirect, specularIndirect, normalWorld, viewDirectionWorld, dx_SkyColor, albedo, smoothness, ambientOcclusion);
+
+	outIndirectDiffuse = float4(diffuseIndirect, 0.0f);
+	outIndirectSpecular = float4(0.0f, 0.0f, 0.0f, 0.0f); // specularIndirect is combined in postprocess_combine.ps with SSR
+}

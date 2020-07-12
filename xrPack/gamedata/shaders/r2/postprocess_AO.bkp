@@ -1,0 +1,272 @@
+#include "common.h"
+
+#include "shared\common.h"
+#include "shared\stalker_Core.h"
+#include "shared\stalker_Utils.h"
+
+#include "lmodel.h"
+#include "hmodel.h"
+#include "fmodel.h"
+
+uniform float4 dx_ScreenSize;
+
+float3 MultiBounce(float AO, float3 Albedo)
+{
+	float3 A = 2 * Albedo - 0.33;
+	float3 B = -4.8 * Albedo + 0.64;
+	float3 C = 2.75 * Albedo + 0.69;
+	return max(AO, ((AO * A + B) * AO + C) * AO);
+}
+
+// http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
+
+float radicalInverse_VdC(uint bits) 
+{
+     bits = (bits << 16u) | (bits >> 16u);
+     bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+     bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+     bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+     bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+     return float(bits) * 2.3283064365386963e-10; // / 0x100000000
+ }
+
+float2 hammersley2d(uint i, uint N)
+{
+    return float2(float(i)/float(N), radicalInverse_VdC(i));
+}
+
+ float3 hemisphereSample_uniform(float u, float v)
+{
+    float phi = v * 2.0 * STALKER_PI;
+    float cosTheta = 1.0 - u;
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+    return float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+}
+
+float3 hemisphereSample_cos(float u, float v)
+{
+    float phi = v * 2.0 * STALKER_PI;
+    float cosTheta = sqrt(1.0 - u);
+    float sinTheta = sqrt(1.0 - cosTheta * cosTheta);
+    return float3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
+}
+// Brian Karis, Epic Games "Real Shading in Unreal Engine 4"
+float4 ImportanceSampleGGX(float2 Xi, float Roughness)
+{
+	float m = Roughness * Roughness;
+	float m2 = m * m;
+		
+	float Phi = 2.0f * STALKER_PI * Xi.x;
+				 
+	float CosTheta = sqrt((1.0f - Xi.y) / (1.0f + (m2 - 1.0f) * Xi.y));
+	float SinTheta = sqrt(max(1e-5f, 1.0f - CosTheta * CosTheta));
+				 
+	float3 H;
+	H.x = SinTheta * cos(Phi);
+	H.y = SinTheta * sin(Phi);
+	H.z = CosTheta;
+		
+	float d = (CosTheta * m2 - CosTheta) * CosTheta + 1.0f;
+	float D = m2 / (STALKER_PI * d * d);
+	float pdf = D * CosTheta;
+
+	return float4(H, pdf); 
+}
+float RayAttenBorder (float2 pos, float value)
+{
+	float borderDist = min(1.0 - max(pos.x, pos.y), min(pos.x, pos.y));
+	return saturate(borderDist > value ? 1.0 : borderDist / value);
+}
+
+struct 	v2p
+{
+	float4 tc0: 		TEXCOORD0;
+};
+
+void main 
+( 
+		v2p I,
+		out float4 outSSRRaycast : COLOR0
+)
+{
+	// COORD
+	float2 uv = I.tc0;
+	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	//
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_ProjectionParams.y;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_depth, uv);
+		if(gBuffer3.w <= 0 ) gBuffer3.w = 1.0f;
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked =  1.0f /*data.occlusion*/;
+				
+	float materialID = data.materialID;
+	
+	float depth = data.depth;
+	
+	float linearDepth = LinearDepth(depth);
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	//
+	float3 positionWorld = mul(dx_matrix_CameraToWorld, float4(positionView, 1.0f));
+	float3 normalWorld = normalize(mul((float3x3)dx_matrix_CameraToWorld, normalView));
+	
+	//float roughness = pow(1.0f - smoothness * 0.7f, 6.0f);
+	float roughness = max(1.0f - smoothness, 0.01f);
+	
+	float3 cameraPositionWorld = eye_position;
+		
+	float3 viewDirectionWorld = normalize(positionWorld - cameraPositionWorld);
+	//
+
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (dx_ScreenSize.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(uv * (dx_ScreenSize.xy), 0.0f);
+	
+	#ifdef STALKER_USE_TAA
+		interleavedGradientNoise = fmod(interleavedGradientNoise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+	
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	
+	const float2 blueNoiseRand[4] = {blueNoise.xy , blueNoise.zw , float2(-blueNoise.y, blueNoise.x) , float2(-blueNoise.w, blueNoise.z)};
+	//
+
+	// CRYTEK SSAO
+	#ifdef STALKER_CRYTEK_SSAO
+		float2 screenTC = uv;
+			
+		float offsetScale = STALKER_CRYTEK_SSAO_SIZE;
+		
+		offsetScale = offsetScale * saturate(linearDepth / 3.5f) * (1.0f + linearDepth / 2.0f ); // Large at distance and small at close range
+		offsetScale *= 1.0f / linearDepth;
+		
+		float3 vRotation = float3(rotation, blueNoise.z);
+
+		float fSceneDepthP = linearDepth;
+
+		const float offsetScaleStep = 1 + 2.4 / STALKER_CRYTEK_SSAO_NUM_SAMPLES;
+		float3 vSamplePos = float3(0,0,0);
+		float Accessibility = 0;
+		for ( int ao=0; ao <( STALKER_CRYTEK_SSAO_NUM_SAMPLES / 8); ao++ )
+		for ( int x= -1; x<=1; x+=2)
+		for ( int y= -1; y<=1; y+=2)
+		for ( int z= -1; z<=1; z+=2)
+		{
+			
+			float3 vOffset = normalize( float3( x, y ,z )) * (offsetScale *= offsetScaleStep);
+			float3 vRotatedOffset = reflect(vOffset, vRotation);
+
+			vSamplePos = float3( screenTC.x, screenTC.y, fSceneDepthP );
+				
+			vSamplePos += float3( vRotatedOffset.xy, vRotatedOffset.z * fSceneDepthP * 2);
+
+			float fSceneDepthS = LinearDepth( tex2Dlod(s_depth, float4(vSamplePos.xy, 0, 0)).w);
+
+			float fRangeIsInvalid = saturate(((fSceneDepthP - fSceneDepthS) / fSceneDepthP));
+				
+			float occlusion = fSceneDepthS > vSamplePos.z;
+				
+			Accessibility += lerp(occlusion, 0.5f, fRangeIsInvalid);
+		}
+		Accessibility = Accessibility / STALKER_CRYTEK_SSAO_NUM_SAMPLES;
+		
+		outSSRRaycast.x = 0.5f;
+		outSSRRaycast.y = 0.5f;
+		outSSRRaycast.z = 1.0f;
+		outSSRRaycast.w = saturate(Accessibility * Accessibility + Accessibility);
+	#endif
+
+    #ifndef STALKER_CRYTEK_SSAO
+		float3 viewRay = normalize(positionView);
+
+		float4 screenSpacePos  = float4(uv, depth, 1.0f);
+		
+		float3 raySample = screenSpacePos;
+		
+		float hitPDF = 0.0f;
+		int hitFail = 1;
+		for (int k = 0; k < 1; k++)
+		{
+			
+		
+		float2 Xi = /*hammersley2d(k, 4)*/ blueNoiseRand[k].xy;
+
+        float3 L = Ldynamic_dir.xyz + (-normalView);
+
+        float4 samplePoint = float4(hemisphereSample_cos(Xi.x, Xi.y), 1.0f);
+
+        float4 H = TangentToWorld(L, samplePoint);
+		
+		hitPDF = H.w;
+		
+        float3 rayDir = /*reflect(viewRay, H.xyz)*/ H.xyz * STALKER_STOCHASTIC_SSAO_LENGTH;
+
+		float3 screenSpaceReflectionfloat = float3(rayDir.xy - positionView.xy  / positionView.z * rayDir.z, rayDir.z / positionView.z) * dx_Projection_Params.xyz;
+			
+		const int NUM_RAY_MARCH_SAMPLES = 24;
+		
+        const float SIZE_RAY_MARCH_STEPS = (1.0f / ((float) NUM_RAY_MARCH_SAMPLES)) * 0.5f;
+		
+		float reflectionRayMarchStep = SIZE_RAY_MARCH_STEPS;
+		reflectionRayMarchStep = reflectionRayMarchStep * (blueNoise.x + blueNoise.y) + reflectionRayMarchStep;
+	
+		[unroll (NUM_RAY_MARCH_SAMPLES)]
+		for (int rayStepIdx = 0; rayStepIdx < NUM_RAY_MARCH_SAMPLES; rayStepIdx++)
+		{
+			float ZBufferVal = tex2Dlod(s_depth, float4(raySample.xy,0,0)).w;
+					if(ZBufferVal <= 0 ) ZBufferVal = 1.0f;
+					
+			float delta = raySample.z - ZBufferVal;
+
+        float thickness =  STALKER_STOCHASTIC_SSAO_THICKNESS / linearDepth;
+	
+			if (0.0f < delta && delta < thickness)
+			{
+				hitFail = 0;
+				break;
+			}
+
+			raySample += screenSpaceReflectionfloat * reflectionRayMarchStep;
+
+			reflectionRayMarchStep *= 1.0f + SIZE_RAY_MARCH_STEPS; // Increase step size after each iteration
+		}
+		}
+
+		outSSRRaycast.xy = raySample.xy;
+		outSSRRaycast.z = 1.0f / hitPDF;
+		outSSRRaycast.w = saturate((float)hitFail);
+    #endif
+}

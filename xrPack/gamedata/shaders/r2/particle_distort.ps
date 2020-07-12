@@ -1,0 +1,21 @@
+#include "common.h"
+
+struct VertexOuput_Particle
+{
+	float4 vs_vertex			: POSITION;
+	float4 vs_positionScreen	: TEXCOORD0;
+	float2 vs_textureCoord		: TEXCOORD1;
+	float4 vs_vertexColor		: TEXCOORD2;
+	float3 vs_normalView : TEXCOORD3;
+};
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// Pixel
+uniform sampler s_distort;
+half4 	main	( VertexOuput_Particle I )	: COLOR
+{
+	half4	distort	= tex2D		(s_distort, I.vs_textureCoord);
+	half    factor	= distort.a * dot(I.vs_vertexColor.rgb,0.33h);
+	return	half4	(distort.rgb,factor);
+}

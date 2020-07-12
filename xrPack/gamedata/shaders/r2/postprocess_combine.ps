@@ -1,0 +1,156 @@
+#include "common.h"
+
+uniform sampler2D s_SSR_Raycast;
+uniform sampler2D s_currentColor;
+uniform sampler2D s_previousColor;
+uniform sampler2D s_reflectionColor;
+
+struct CombineVertexInput      
+{
+	float2 tc0	: TEXCOORD0;
+};
+
+float4 main(CombineVertexInput Input) : COLOR
+{
+	// COORD
+	float2 uv = Input.tc0;
+	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	//
+
+    float3 currentColor = tex2D(s_currentColor, uv);
+
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_depth, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked = data.occlusion;
+				
+	float materialID = data.materialID;
+	
+	float depth = data.depth;
+	
+    float linearDepth = data.position.z /*LinearDepth(depth)*/;
+		
+    float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	//
+	float3 positionWorld = mul(dx_matrix_CameraToWorld, float4(positionView, 1.0f));
+	float3 normalWorld = normalize(mul((float3x3)dx_matrix_CameraToWorld, normalView));
+	
+	//float roughness = pow(1.0f - smoothness * 0.7f, 6.0f);
+	float roughness = max(1.0f - smoothness, 0.01f);
+	
+	float3 cameraPositionWorld = eye_position;
+		
+	float3 viewDirectionWorld = normalize(positionWorld - cameraPositionWorld);
+	//
+
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * STALKER_SCREEN_SIZE.xy / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+		
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+
+	// IBL
+	float mip = 0 /*(1 - smoothness) * STALKER_IBL_NUM_MIP*/; 
+
+	float2 Xi = blueNoise.xy;
+	//Xi.y = lerp(Xi.y, 0.0f, 0.75f); 
+
+	float4 H = TangentToWorld(normalWorld, ImportanceSampleGGX(Xi, roughness));
+
+	float3 reflectWorld = reflect(viewDirectionWorld, H.xyz);
+
+	float3 specularCube0 = SampleIBL(s_specular_s0, reflectWorld, mip);
+	float3 specularCube1 = SampleIBL(s_specular_s1, reflectWorld, mip);
+
+	float3 specularIndirect = dx_SkyColor.rgb * lerp(specularCube0, specularCube1, dx_SkyColor.a);
+
+	float NdotV = saturate(dot(normalWorld, -viewDirectionWorld));
+
+	float3 F_R = F_LazarovApprox(specularColor, roughness, NdotV);
+	
+	float4 ssao = tex2D(s_AO, uv);
+	
+	#ifdef STALKER_USE_STOCHASTIC_SSR
+		float4 reflectionColor = tex2D(s_reflectionColor, uv);
+
+		currentColor += lerp(specularIndirect * ssao.w /* saturate(ambientOcclusionBaked)*/, reflectionColor.rgb, reflectionColor.a) * F_R;
+	#else
+		currentColor += specularIndirect * ssao.w /* saturate(ambientOcclusionBaked) */ * F_R;
+	#endif
+	
+	// FOG
+    #ifndef STALKER_DEBUG_COMBINE_PASS
+	    float fogHeight = ComputeHeightFog(positionWorld, eye_position, dx_WeatherParams.x);
+	
+		#if 0
+			float fog = saturate(ComputeLegacyFog(positionView) * fogHeight);
+		#else
+			float fog = saturate(ComputeExponentialFog(positionView) * fogHeight);
+		#endif
+	
+		float3 atmosphericScattering = fog_color;
+		ComputeFogLighting(atmosphericScattering, viewDirectionWorld, dx_SkyColor);
+			
+		#ifdef STALKER_FOG_SUN
+			float sunFactor = saturate(dot(normalize(positionView), -Ldynamic_dir.xyz));
+			atmosphericScattering += Ldynamic_color.rgb * pow(sunFactor, 8.0);
+			//atmosphericScattering = lerp(atmosphericScattering, Ldynamic_color.rgb, pow(sunFactor,8.0));
+		#endif
+
+		currentColor = lerp(currentColor, atmosphericScattering, fog);
+    #endif
+
+	#ifdef STALKER_DEBUG_PBR_ALBEDO
+		float luminance = dot(albedo, float3(0.2126f, 0.7152f, 0.0722f));
+
+		float toCheck = luminance /*smoothness*/;
+		
+		float minRange = 0.012983032342173f /*0.0318960330730115f*/;
+		float maxRange = 0.896269353374266f;
+		
+		if(toCheck >= minRange && toCheck <= maxRange)
+		{
+			currentColor.rgb = uv.x < STALKER_DEBUG_DIVIDER ? float3(0,1,0) : albedo;
+		}
+		else
+		{
+			currentColor.rgb = uv.x < STALKER_DEBUG_DIVIDER ? float3(1,0,0) : albedo;
+		}
+	#endif
+	  
+ 	return float4(currentColor, 1.0f);
+}

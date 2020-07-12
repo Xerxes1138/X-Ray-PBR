@@ -1,0 +1,10 @@
+#include "common.h"
+
+void main 
+( 
+	VertexOuput Input,
+    out half4 depth : COLOR0
+)
+{
+	depth = Input.vs_Position.z / Input.vs_Position.w;
+}

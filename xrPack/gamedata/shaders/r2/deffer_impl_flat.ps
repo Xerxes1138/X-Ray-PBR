@@ -1,0 +1,186 @@
+// Terrain shader
+#define	USE_TDETAIL
+#define	USE_4_DETAIL
+
+#if defined(USE_TDETAIL) && defined(USE_4_DETAIL)
+    #define	USE_TBUMP
+	#define	USE_4_BUMP
+#endif
+
+#include "common.h"
+#include "stalker_SurfaceData.h"
+
+sampler2D s_rain_ripple;
+sampler2D s_rain_puddle;
+
+void main 
+( 
+	VertexOutput_GBUFFER Input,
+    out half4 outGBuffer0 : COLOR0,
+    out half4 outGBuffer1 : COLOR1,
+	out half4 outGBuffer2 : COLOR2,
+	out half4 outGBuffer3 : COLOR3
+)
+{
+	float3 positionView = Input.vs_positionView.xyz;
+	
+	half3 albedo = tbase(Input.vs_textureCoord).rgb;
+	
+	half ambientOcclusionBaked = tbase(Input.vs_textureCoord).a /* 3.0f*/;
+	
+	half4 lightmap = tex2D(s_lmap, Input.vs_textureCoord);
+
+	half smoothness	= def_gloss;
+	
+	half microOclusion = 1.0f;
+
+	#ifdef USE_TDETAIL
+		#ifdef USE_4_DETAIL
+		half4 mask = tex2D(s_mask, Input.vs_textureCoord);
+		//mask.a = mask.a * mask.a;
+				
+		half4 albedoR = tex2D(s_dt_r, Input.tcdbump);
+		half4 albedoG = tex2D(s_dt_g, Input.tcdbump);
+		half4 albedoB = tex2D(s_dt_b, Input.tcdbump);
+		half4 albedoA = tex2D(s_dt_a, Input.tcdbump);
+		
+		float radius = 0.3f;
+		
+		float heightR = (albedoR.a + mask.r);
+		float heightG = (albedoG.a + mask.g);
+		float heightB = (albedoB.a + mask.b);
+		float heightA = (albedoA.a + mask.a);
+		
+		float sum = max(heightR, max(heightG, max(heightB, heightA)));
+		
+		float4 height = max(1e-5f, float4(heightR, heightG, heightB, heightA) - sum + radius);
+		height /= saturate(dot(height, 1.0f));
+		
+		albedo = 2.0f * albedo * (height.r * albedoR + height.g * albedoG + height.b * albedoB + height.a * albedoA) * saturate(dot(mask, 1.0));
+
+		#ifdef USE_4_BUMP
+			half3 normalR = UnpackNormal(tex2D(s_dn_r, Input.tcdbump));
+			half3 normalG = UnpackNormal(tex2D(s_dn_g, Input.tcdbump));
+			half3 normalB = UnpackNormal(tex2D(s_dn_b, Input.tcdbump));
+			half3 normalA = UnpackNormal(tex2D(s_dn_a, Input.tcdbump));
+			
+			half smoothnessR = tex2D(s_dn_r, Input.tcdbump).r;
+			half smoothnessG = tex2D(s_dn_g, Input.tcdbump).r;
+			half smoothnessB = tex2D(s_dn_b, Input.tcdbump).r;
+			half smoothnessA = tex2D(s_dn_a, Input.tcdbump).r;
+			
+			half microOclusionR = tex2D(s_dn_r, Input.tcdbump).g;
+			half microOclusionG = tex2D(s_dn_g, Input.tcdbump).g;
+			half microOclusionB = tex2D(s_dn_b, Input.tcdbump).g;
+			half microOclusionA = tex2D(s_dn_a, Input.tcdbump).g;
+
+			half3 normal = (height.r * normalR + height.g * normalG + height.b * normalB + height.a * normalA) * saturate(dot(mask, 1.0));
+			 
+			smoothness = (height.r * smoothnessR + height.g * smoothnessG + height.b * smoothnessB + height.a * smoothnessA) * saturate(dot(mask, 1.0));
+			
+			microOclusion = (height.r * microOclusionR + height.g * microOclusionG + height.b * microOclusionB + height.a * microOclusionA) * saturate(dot(mask, 1.0));
+							
+			half3 normalView = normalize(mul(half3x3(Input.vs_tangentView, Input.vs_binormalView, Input.vs_normalView), normal));
+		#else
+			half3 normalView = normalize(Input.N.xyz);
+		#endif
+		
+		#else
+			albedo	= 2.0 * albedo * tex2D(s_detail, Input.tcdbump).rgb;
+		#endif
+	#else
+		half3 normalView = normalize(Input.N.xyz);
+	#endif
+
+	half ms	= xmaterial;
+	#ifdef USE_R2_STATIC_SUN
+		 ms = lightmap.w;
+	#endif
+	
+	// RAIN LAYER
+	#ifdef STALKER_USE_LEGACY_RAIN
+		#ifdef USE_TDETAIL
+			#ifdef USE_4_DETAIL	
+			
+
+				float4 TimeMul = float4(1.0f, 0.85f, 0.93f, 1.13f); 
+				float4 TimeAdd = float4(0.0f, 0.2f, 0.45f, 0.7f);
+				float4 Times = (timers.x * TimeMul + TimeAdd) * 1.6f;
+				Times = frac(Times);
+				
+				float4 Weights = dx_WeatherParams.x - float4(0, 0.25, 0.5, 0.75);
+				Weights = saturate(Weights * 4);
+
+				#ifdef USE_4_BUMP
+					//half3 normalWater = normalize(mul(half3x3(Input.M1, Input.M2, Input.M3), float3(0,0,1)));
+					
+					half3 rippleNormal1 = ComputeRipple(s_rain_ripple, Input.vs_positionWorldAndDepth.xy + float2( 0.25f,0.0f), Times.x, Weights.x);
+					half3 rippleNormal2 = ComputeRipple(s_rain_ripple, Input.vs_positionWorldAndDepth.xy + float2(-0.55f,0.3f), Times.y, Weights.y);
+					half3 rippleNormal3 = ComputeRipple(s_rain_ripple, Input.vs_positionWorldAndDepth.xy + float2(0.6f, 0.85f), Times.z, Weights.z);
+					half3 rippleNormal4 = ComputeRipple(s_rain_ripple, Input.vs_positionWorldAndDepth.xy + float2(0.5f,-0.75f), Times.w, Weights.w); 
+
+					float4 Z = lerp(1.0f, float4(rippleNormal1.z, rippleNormal2.z, rippleNormal3.z, rippleNormal4.z), Weights);
+					
+					float3 rippleNormal = float3
+					(
+						Weights.x * rippleNormal1.xy +
+						Weights.y * rippleNormal2.xy + 
+						Weights.z * rippleNormal3.xy + 
+						Weights.w * rippleNormal4.xy, Z.x * Z.y * Z.z * Z.w
+					);
+					rippleNormal = normalize(rippleNormal);
+					
+					half3 normalWater = normalize(mul(half3x3(Input.vs_tangentView, Input.vs_binormalView, Input.vs_normalView), rippleNormal));
+					
+				#else
+					half3 normalWater = normalize(Input.N.xyz);
+				#endif
+				
+				float slope = pow(saturate(Input.vs_normalWorld.y), 16.0);
+					
+				half4 smoothnessWater = 0.98f;
+				half wetSource = 1.0f - tex2D(s_rain_puddle, Input.vs_positionWorldAndDepth.xy / 40);
+				half wet = dx_WeatherParams.x;
+				half flood =  dx_WeatherParams.x;
+				half puddle = dx_WeatherParams.x /* slope*/;
+				
+				// Get depth/accumulation water information
+				float2 accumulatedWaters;
+				// Get the "size" of the accumulated water in a hole/cracks
+				accumulatedWaters.x = min(flood, 1.0f - height);
+				// Get the size of the accumlated water in puddle taking into account the 
+				// marging (0.4 constant here)
+				accumulatedWaters.y = saturate((puddle - wetSource) / 0.4f);
+				// Mix vertex color and height map accumulated water by taking the higher
+				float  accumulatedWater = max(accumulatedWaters.x, accumulatedWaters.y);
+
+			
+
+				// WetLevel could be 0 but we can still require to have wet surface
+				// if there is accumulated water.
+				float newWetLevel = saturate(wet + accumulatedWater);
+				
+				float metallic = 0.0f;//saturate((dot(0.04f, 0.33f) * 1000 - 500));
+
+				// Calculate the surface wet BRDF parameters for the new wet level
+				DoWetProcess(albedo, smoothness, metallic, newWetLevel);
+
+				smoothness = lerp(smoothness, smoothnessWater, accumulatedWater);
+				normalView = lerp(normalView, normalWater, accumulatedWater);
+			#endif
+		#endif
+	#endif
+
+	GBufferData data;
+	data.position = positionView /*=+ normalView * def_virtualh / 2.0f*/;
+	data.normal = normalView;
+	data.diffuseColor = albedo;
+	data.specularColor = (float3)0.04f;
+	
+    data.materialID = ms;
+    data.smoothness = smoothness;
+    data.occlusion = ambientOcclusionBaked * microOclusion;
+    data.depth = Input.vs_positionWorldAndDepth.z / Input.vs_positionWorldAndDepth.w;
+	
+	DataToGBuffer(data, outGBuffer0, outGBuffer1, outGBuffer2, outGBuffer3);
+}

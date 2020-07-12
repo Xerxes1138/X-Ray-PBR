@@ -4,7 +4,7 @@
 void	CRenderTarget::phase_scene_prepare	()
 {
 	// Clear G-Buffer
-	u_setrt		(rt_Position,	rt_Normal,	rt_Color, rt_Depth, 0);
+	u_setrt		(rt_Position,	rt_Normal,	rt_Color, rt_SpecularColor, 0);
 	CHK_DX(HW.pDevice->Clear	( 0L, NULL, D3DCLEAR_TARGET, 0x0, 1.0f, 0L));
 
 	// Clear depth & stencil
@@ -22,11 +22,11 @@ void	CRenderTarget::phase_scene_begin	()
 	// Targets, use accumulator for temporary storage
 	if (RImplementation.o.albedo_wo)
 	{
-		u_setrt		(rt_Position,	rt_Normal,	rt_Accumulator, rt_Depth, HW.pBaseZB);
+		u_setrt		(rt_Position,	rt_Normal,	rt_Accumulator, rt_SpecularColor, HW.pBaseZB);
 	}
 	else	
 	{
-		u_setrt		(rt_Position,	rt_Normal,	rt_Color, rt_Depth, HW.pBaseZB);
+		u_setrt		(rt_Position,	rt_Normal,	rt_Color, rt_SpecularColor, HW.pBaseZB);
 	}
 
 	// Stencil - write 0x1 at pixel pos

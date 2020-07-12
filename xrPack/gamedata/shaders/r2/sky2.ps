@@ -1,0 +1,34 @@
+#include "common.h"
+#include "hmodel.h"
+
+struct v2p
+{
+	float4	factor		:	COLOR0;
+	float4	pos 		:	TEXCOORD2;
+	float3	tc0			:	TEXCOORD0;
+	float3	tc1			:	TEXCOORD1;
+	float4	screenPos	: 	TEXCOORD3;
+	float3	normal		: 	TEXCOORD4;
+};
+
+uniform samplerCUBE s_sky0;
+uniform samplerCUBE s_sky1;
+
+float4 main(v2p I) : COLOR
+{
+	#ifdef STALKER_LEGACY
+		float2 screenUV = I.screenPos.xy / I.screenPos.w;	
+
+        float3 s0 = texCUBElod(s_sky0, float4(I.pos.xyz, 0));
+        float3 s1 = texCUBElod(s_sky1, float4(I.pos.xyz, 0));
+        float3 sky =  accurateSRGBToLinear(I.factor.rgb * lerp(s0, s1, I.factor.w));
+	#else
+		float2 screenUV = I.screenPos.xy / I.screenPos.w;	
+
+        float3 s0 = texCUBElod(s_sky0, float4(I.pos.xyz, 0));
+        float3 s1 = texCUBElod(s_sky1, float4(I.pos.xyz, 0));
+        float3 sky = I.factor.rgb * lerp(s0, s1, I.factor.w);
+	#endif
+
+	return        	float4(sky, 1.0f);
+}
