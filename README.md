@@ -5,13 +5,14 @@ An attempt at converting X-Ray 1.0 engine (SoC) to PBR.
 # FEATURES
 * SSAO (Crytek)
 * Stochastic Screen Space Reflection
-* Screen SubSurface Scattering
+* Screen Space SubSurface Scattering
 * Temporal AA
 * Motion Vector (Camera Only)
 * Contact Shadows
 * Tonemap (ACES or Hable)
 
 # TODO
+* Bloom
 * G-Buffer optimization
 * GTAO
 * Per object motion vector
