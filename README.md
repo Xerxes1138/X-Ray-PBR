@@ -1,4 +1,4 @@
-# X-Ray_Xerxes1138
+# X-Ray 1.0 PBR
 
 An attempt at converting X-Ray 1.0 to PBR.
 
