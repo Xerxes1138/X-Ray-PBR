@@ -279,9 +279,6 @@
     <ClInclude Include="blender_postprocess_combine.h">
       <Filter>Shading templates</Filter>
     </ClInclude>
-    <ClInclude Include="blender_raytraced_shadows.h">
-      <Filter>Shading templates</Filter>
-    </ClInclude>
     <ClInclude Include="blender_postprocess_AO.h">
       <Filter>Shading templates</Filter>
     </ClInclude>
@@ -655,12 +652,6 @@
     </ClCompile>
     <ClCompile Include="r2_rendertarget_phase_postprocess_combine.cpp">
       <Filter>Core_Target</Filter>
-    </ClCompile>
-    <ClCompile Include="r2_rendertarget_accum_raytraced_shadows.cpp">
-      <Filter>Core_Target</Filter>
-    </ClCompile>
-    <ClCompile Include="blender_raytraced_shadows.cpp">
-      <Filter>Shading templates</Filter>
     </ClCompile>
     <ClCompile Include="blender_postprocess_AO.cpp">
       <Filter>Shading templates</Filter>

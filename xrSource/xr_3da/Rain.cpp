@@ -166,7 +166,7 @@ void	CEffect_Rain::Render	()
 
 	u32 desired_items			= iFloor	(0.5f*(1.f+factor)*float(max_desired_items));
 	// visual
-	float		factor_visual	= factor/2.f+.5f;
+	float		factor_visual	= factor/2.f+.5f; // WHY ?
 	Fvector3	f_rain_color	= g_pGamePersistent->Environment().CurrentEnv.rain_color;
 	u32			u_rain_color	= color_rgba_f(f_rain_color.x,f_rain_color.y,f_rain_color.z,factor_visual);
 

@@ -104,12 +104,6 @@ private:
 	ref_shader					s_accum_spot	;
 	ref_shader					s_accum_reflected;
 
-	// Accum Raytraced Shadows
-	IBlender*					b_accum_raytraced_shadows;
-	ref_shader					s_accum_raytraced_shadows;
-	ref_geom					g_accum_raytraced_shadows;
-	//
-
 	// AO
 	IBlender*					b_postprocess_AO;
 	ref_shader					s_postprocess_AO;

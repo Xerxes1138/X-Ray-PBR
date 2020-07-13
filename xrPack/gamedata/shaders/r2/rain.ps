@@ -1,0 +1,133 @@
+#include "common.h"
+#include "hmodel.h"
+
+#define STALKER_WATER_EDGE 0.03125f
+#define STALKER_WATER_MEDIUM_COLOR accurateSRGBToLinear(float3(0.8396226, 0.6315807, 0.368325))
+#define STALKER_WATER_FOG_COLOR STALKER_WATER_MEDIUM_COLOR
+
+float RayAttenBorder (float2 pos, float value)
+{
+	float borderDist = min(1.0 - max(pos.x, pos.y), min(pos.x, pos.y));
+	return saturate(borderDist > value ? 1.0 : borderDist / value);
+}
+			
+float2 ReflectionCoord(float3 V, float3 H)
+{
+	float3 reflectionRay = normalize(reflect(V, H));
+	float4 reflectionViewProjection = mul(m_VP, reflectionRay);
+	float2 reflectionScreenPos = (reflectionViewProjection.xy / reflectionViewProjection.w);
+	reflectionScreenPos.y = -reflectionScreenPos.y;
+	float2 reflectionScreenUV = 0.5 * reflectionScreenPos + 0.5; // UV Space
+
+	return reflectionScreenUV;
+}
+
+float2 RefractionCoord(float3 V, float3 N)
+{
+	float3 refractionRay = normalize(refract(V, N, 1.0f / 1.33f));
+	refractionRay = V + refractionRay * 0.5f;
+	
+	float4 refractionViewProjection = mul(m_VP, refractionRay);
+
+	float2 refractionScreenPos = refractionViewProjection.xy / refractionViewProjection.w;
+	refractionScreenPos.y = -refractionScreenPos.y;
+	float2 refractionScreenUV = refractionScreenPos * 0.5 + 0.5;
+
+	return refractionScreenUV;
+}
+			
+float3 TangentToWorld(float3 i_tangent, float3 i_binormal, float3 i_normal, float3 dir)
+{
+	return normalize(((i_tangent * dir.x) + (i_binormal * dir.y) + (i_normal * dir.z)));
+}
+
+// Schlick 1994, "An Inexpensive BRDF Model for Physically-Based Rendering"
+// Lagarde 2012, "Spherical Gaussian approximation for Blinn-Phong, Phong and Fresnel"
+float3 F_Schlick(float3 SpecularColor, float LdotH)
+{
+    return SpecularColor + ( 1.0f - SpecularColor ) * exp2( (-5.55473 * LdotH - 6.98316) * LdotH );
+}
+
+struct   vf
+{
+        float4         hpos        :         POSITION        ;
+        float2  tbase        :        TEXCOORD0        ;  // base
+        float3         M1                :        TEXCOORD3        ;
+        float3         M2                :        TEXCOORD4        ;
+        float3         M3                :        TEXCOORD5        ;
+        float4        c0                :          COLOR0                ;
+        float          fog        :         FOG                ;
+		float4          screenPos        :         TEXCOORD7                ;
+		float3          positionWorld       :         TEXCOORD6               ;
+};
+
+uniform	sampler2D		s_nmap;
+uniform	sampler2D		s_wnmap;
+
+uniform sampler2D		s_sceneColor;
+
+////////////////////////////////////////////////////////////////////////////////
+// Pixel
+void main 
+( 
+	vf I,
+    out float4 outGBuffer0 : COLOR0
+)
+{
+		float2 screenUV = I.screenPos.xy / I.screenPos.w;
+
+		float4 positionView = tex2D(s_position, screenUV);
+		
+		float3 normalTangent = normalize(tex2D(s_nmap, I.tbase) * 2 - 1);
+		//normalTangent = lerp(float3(0,0,1), normalTangent, 0.25f);
+				
+		float3 V = normalize(I.positionWorld - eye_position);
+
+        float4 diffuseColor = SampleBaseColorAndAlpha(s_base, I.tbase);
+		
+		float3 normalWorld = TangentToWorld(I.M1, I.M2, I.M3, normalTangent);
+				
+		// REFRACTION
+		float2 refractionCoord = RefractionCoord(V, normalWorld);
+		//
+		
+		float4 sceneColor = tex2D(s_sceneColor, screenUV + normalTangent * 0.3f);
+		
+
+
+		
+		float3 diffuseIBL, specularIBL;
+		ComputeImageBasedLighting(diffuseIBL, specularIBL, normalWorld, V, L_ambient, 0);
+		
+		float3 fogIBL;
+		//V = RotateAroundYAxis(V, dx_SkyRotation.x);
+
+		float3 fogCube0 = SampleIBL(env_s0, V);
+		float3 fogCube1 = SampleIBL(env_s1, V);
+
+		fogIBL = L_ambient.rgb * lerp(fogCube0, fogCube1, L_ambient.a);
+
+        float NdotV = saturate(dot(normalWorld, -V));
+        float F = F_Schlick(0.02f, NdotV);                
+
+
+		// REFLECTION
+		float2 reflectionCoord = ReflectionCoord(V, normalWorld);
+		
+		float reflectionMask = saturate(dot(V, reflect(V, normalWorld)));
+
+		float3 reflectionColor = tex2D(s_sceneColor, reflectionCoord);
+		reflectionColor = lerp(specularIBL, reflectionColor, RayAttenBorder(reflectionCoord, 0.25f) * reflectionMask);
+		//
+		
+
+		
+		float3 final = I.c0.rgb * sceneColor * I.c0.a;
+ 
+		float softEdge = saturate((positionView.z - I.screenPos.z) / 0.1f);
+		
+		// FOG
+		final = lerp(final, fogIBL, I.fog);
+
+		outGBuffer0 = float4(final, diffuseColor.a);
+}

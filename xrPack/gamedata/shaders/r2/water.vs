@@ -85,7 +85,17 @@ vf main (v_vert v)
         o.hpos                 = mul                        (m_VP, P);                        // xform, input in world coords
 		
 		float3 positionView = mul(m_WV, P);
-		o.fog       = ComputeExponentialFog(positionView);
+		
+		float fogHeight = ComputeHeightFog(positionWorld, eye_position, dx_WeatherParams.x);
+	
+		#if 0
+			float fog = saturate(ComputeLegacyFog(positionView) * fogHeight);
+		#else
+			float fog = saturate(ComputeExponentialFog(positionView) * fogHeight);
+		#endif
+		
+		
+		o.fog       = fog;
 
 		o.c0		= v.N.wwww;
 		

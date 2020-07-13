@@ -62,10 +62,15 @@ float4 	main( TonemapVertexInput I ) : COLOR
 
         currentColor = refractedColor;
      #endif
-    
-    float4 bloom = tex2D(s_bloom, uv);
-    
-    currentColor += max(1e-5f, bloom.rgb /* bloom.a*/);
+
+    float4 bloom1 = tex2D(s_bloom, uv + float2(-2,-2) * STALKER_SCREEN_SIZE.zw);
+    float4 bloom2 = tex2D(s_bloom, uv + float2(2,-2) * STALKER_SCREEN_SIZE.zw);
+	float4 bloom3 = tex2D(s_bloom, uv + float2(-2,2) * STALKER_SCREEN_SIZE.zw);
+	float4 bloom4 = tex2D(s_bloom, uv + float2(2,2) * STALKER_SCREEN_SIZE.zw);
+	
+	float4 bloom = (bloom1 + bloom2 + bloom3 + bloom4) / 4.0f;
+		
+    currentColor += max(1e-5f, bloom.rgb);
 
 	#if 0
 		const int stochasticTaps = 4;

@@ -1,7 +1,7 @@
 #ifndef STALKER_FEATURES_H
 #define STALKER_FEATURES_H
 
-#define STALKER_LEGACY // Used for LDR IBL
+//#define STALKER_LEGACY // Used for LDR IBL
 
 //#define STALKER_USE_LEGACY_RAIN
 

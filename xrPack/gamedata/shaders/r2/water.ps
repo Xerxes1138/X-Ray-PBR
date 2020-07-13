@@ -2,7 +2,7 @@
 #include "hmodel.h"
 
 #define STALKER_WATER_EDGE 0.03125f
-#define STALKER_WATER_MEDIUM_COLOR float3(0.8396226, 0.6315807, 0.368325)
+#define STALKER_WATER_MEDIUM_COLOR accurateSRGBToLinear(float3(0.8396226, 0.6315807, 0.368325))
 #define STALKER_WATER_FOG_COLOR STALKER_WATER_MEDIUM_COLOR
 
 float RayAttenBorder (float2 pos, float value)
@@ -54,11 +54,11 @@ struct   vf
            float2  tbase        :        TEXCOORD0        ;  // base
            float2         tnorm0        :        TEXCOORD1        ;  // nm0
            float2         tnorm1        :        TEXCOORD2        ;  // nm1
-        half3         M1                :        TEXCOORD3        ;
-        half3         M2                :        TEXCOORD4        ;
-        half3         M3                :        TEXCOORD5        ;
-        //half3        v2point        :        TEXCOORD6        ;
-           half4        c0                :          COLOR0                ;
+        float3         M1                :        TEXCOORD3        ;
+        float3         M2                :        TEXCOORD4        ;
+        float3         M3                :        TEXCOORD5        ;
+        //float3        v2point        :        TEXCOORD6        ;
+           float4        c0                :          COLOR0                ;
         float          fog        :         FOG                ;
 		float4          screenPos        :         TEXCOORD7                ;
 				float3          positionWorld       :         TEXCOORD6               ;
@@ -74,54 +74,62 @@ uniform sampler2D		s_sceneColor;
 void main 
 ( 
 	vf I,
-    out half4 outGBuffer0 : COLOR0/*,
-    out half4 outGBuffer1 : COLOR1,
-	out half4 outGBuffer2 : COLOR2*/
+    out float4 outGBuffer0 : COLOR0/*,
+    out float4 outGBuffer1 : COLOR1,
+	out float4 outGBuffer2 : COLOR2*/
 )
 {
 		float2 screenUV = I.screenPos.xy / I.screenPos.w;
+
+		float4 positionView = tex2D(s_position, screenUV);
 		
-		half4 depth = tex2D(s_depth, screenUV);
-		
+		float d = saturate(abs(positionView.z - I.screenPos.z));
+				
 		// Surface
-        half4 diffuseColor = tex2D(s_base, I.tbase);
+        float4 diffuseColor = SampleBaseColorAndAlpha(s_base, I.tbase);
+			
+		float foam = saturate((diffuseColor.a - d) / 0.33f);
 		
-		half3 normalTangent = UnpackNormal(tex2D(s_nmap, I.tbase));
+		float3 normalTangent = UnpackNormal(tex2D(s_nmap, I.tbase));
 		normalTangent = lerp(float3(0,0,1), normalTangent, 0.25f);
 		
 		float2 normalOffset0 = ( I.positionWorld.xz / 6) + timers.x * float2(0.2, 0.0);
 		float2 normalOffset1 = ( I.positionWorld.xz / 6) + timers.x * float2(-0.2, 0.0) + float2(0.25, -0.25);
 		
-        half3 n0 = UnpackNormal(tex2D(s_wnmap, normalOffset0)) * 0.5f;
-        half3 n1 = UnpackNormal(tex2D(s_wnmap, normalOffset1)) * 0.5f;
+        float3 n0 = UnpackNormal(tex2D(s_wnmap, normalOffset0)) * 0.5f;
+        float3 n1 = UnpackNormal(tex2D(s_wnmap, normalOffset1)) * 0.5f;
 		
-        half3 waterSurfaceNormal = lerp(float3(0,0,1), float3(n0.xy + n1.xy, 0.0f), 0.03f); //TODO : Using flow map with wind direction instead of two panning normals
+        float3 waterSurfaceNormal = lerp(float3(0,0,1), float3(n0.xy + n1.xy, 0.0f), 0.03f); //TODO : Using flow map with wind direction instead of two panning normals
 		
-		//half3 positionView = I.positionWorld;
-		half3 normalView = normalize(mul(half3x3(I.M1, I.M2, I.M3), normalTangent /*+ waterSurfaceNormal*/));	
+		float3 normalView = normalize(mul(float3x3(I.M1, I.M2, I.M3), normalTangent /*+ waterSurfaceNormal*/));	
 		
 		float hemisphereLighting = I.c0.a;
 		
+		normalTangent = lerp(waterSurfaceNormal, normalTangent, foam);
 		// 
-		half4 positionView = tex2D(s_position, screenUV /*+ waterSurfaceNormal * 0.5f*/); // Deferred view position
+
+		float4 sceneColor = tex2D(s_sceneColor, screenUV + normalTangent * 0.5f);
 		
-		half4 sceneColor = tex2D(s_sceneColor, screenUV + waterSurfaceNormal * 0.5f);
-		
-		half3 normalWorld = TangentToWorld(I.M1, I.M2, I.M3, /*normalTangent +*/ waterSurfaceNormal);//normalize(mul(half3x3(I.M1, I.M2, I.M3), normalTangent + waterSurfaceNormal));	
+		float3 normalWorld = TangentToWorld(I.M1, I.M2, I.M3, normalTangent);
 		
 		float3 V = normalize(I.positionWorld - eye_position);
 		
-		half3 diffuseIBL, specularIBL;
+		float3 diffuseIBL, specularIBL;
 		ComputeImageBasedLighting(diffuseIBL, specularIBL, normalWorld, V, L_ambient, 0);
 		
-		half3 fogIBL;
-		ComputeFogLighting(fogIBL, V, L_ambient);
+		float3 fogIBL;
+		V = RotateAroundYAxis(V, dx_SkyRotation.x);
 
-        half NdotV = saturate(dot(normalWorld, -V));
-        half F = F_Schlick(0.02f, NdotV);                
+		float3 fogCube0 = SampleIBL(env_s0, V);
+		float3 fogCube1 = SampleIBL(env_s1, V);
 
-		float d = saturate(abs(positionView.z - I.screenPos.z));
-		half3 k_d = -log(1e-5 + STALKER_WATER_MEDIUM_COLOR);
+		fogIBL = L_ambient.rgb * lerp(fogCube0, fogCube1, L_ambient.a);
+
+        float NdotV = saturate(dot(normalWorld, -V));
+        float F = F_Schlick(0.02f, NdotV);                
+
+
+		float3 k_d = -log(1e-5 + STALKER_WATER_MEDIUM_COLOR);
 
 		float3 mediumColor = exp(-k_d * d);
 		
@@ -142,29 +150,25 @@ void main
 		float2 refractionCoord = RefractionCoord(V, normalWorld);
 		//
 		
-		half3 final = lerp(mediumWater + (waterFog * STALKER_WATER_FOG_COLOR + diffuseColor.rgb) /** hemisphereLighting*/ * diffuseIBL, reflectionColor, F);//lerp(mediumWater + STALKER_WATER_FOG_COLOR * fog * hemisphereLighting, diffuseColor.rgb * hemisphereLighting, diffuseColor.a);//lerp(diffuse, env_Sky * hemisphereLighting, F);
+		// FOAM
+	
+		
+		float3 final = lerp
+		(
+			lerp(mediumWater + (waterFog * STALKER_WATER_FOG_COLOR) * diffuseIBL, diffuseColor.rgb * diffuseIBL, foam)
+			, 
+			reflectionColor, 
+			F
+		);
  
-		half softEdge = saturate((positionView.z - I.screenPos.z) / STALKER_WATER_EDGE);
+		float softEdge = saturate((positionView.z - I.screenPos.z) / STALKER_WATER_EDGE);
 		
 		// FOG
-		// We are using $user$generic0 RT which is generated after combine pass.
-		// Fog is done during combine pass so when adding it here it doubles it on the relfection! 
-		// We could remove it using "max(1e-5f, reflectionColor - envFogColor);" but it's only A8B8G8R8 so it's not enough precision and results in color burn
 		float fog = I.fog;
 
 		final = lerp(final, fogIBL, fog);
-		
-		
-		//final = L_ambient;
-		
-		//
-		
-		// TONEMAP
-		float3 x = max(0, final - 0.004);
-		float3 retColor = (x*(6.2*x+.5))/(x*(6.2*x+1.7)+0.06);
-		//final = retColor * retColor;
-		
-		outGBuffer0 = half4(final, softEdge);
-		/*outGBuffer1 = half4(normalView, diffuseColor.a);
-		outGBuffer2 = half4(diffuseColor.rgb, hemisphereLighting.r);*/
+
+		outGBuffer0 = float4(final, softEdge);
+		/*outGBuffer1 = float4(normalView, diffuseColor.a);
+		outGBuffer2 = float4(diffuseColor.rgb, hemisphereLighting.r);*/
 }

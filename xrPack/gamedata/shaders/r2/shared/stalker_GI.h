@@ -6,7 +6,7 @@ float3 SampleIBL(samplerCUBE cube, float3 dir)
 	#ifdef STALKER_LEGACY
 		return accurateSRGBToLinear(texCUBE(cube, dir));
 	#else
-		return texCUBE(cube, Dir);
+		return texCUBE(cube, dir);
 	#endif
 }
 
@@ -15,7 +15,7 @@ float3 SampleIBL(samplerCUBE cube, float3 dir, float mip)
 	#ifdef STALKER_LEGACY
 		return accurateSRGBToLinear(texCUBElod(cube, float4(dir, mip)));
 	#else
-		return texCUBElod(samplerCUBE cube, float4(dir, mip));
+		return texCUBElod(cube, float4(dir, mip));
 	#endif
 }
 

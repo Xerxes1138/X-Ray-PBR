@@ -12,7 +12,7 @@ local tex_env1             		= "$user$env_s1"
 
 local tex_rt_depth				= "$user$depth"
 local tex_rt_position			= "$user$position"
-local tex_rt_sceneColor			= "$user$current_color" // $user$generic0 shows weird artefacts 
+local tex_rt_sceneColor			= "$user$generic0" // $user$generic0 shows weird artefacts 
 
 function normal                	(shader, t_base, t_second, t_detail)
 

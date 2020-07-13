@@ -10,7 +10,6 @@
 #include "blender_blit.h"
 #include "blender_bloom_build.h"
 #include "blender_luminance.h"
-#include "Blender_raytraced_shadows.h"
 #include "Blender_ambient.h"
 #include "blender_motionVector.h"
 #include "blender_postprocess_AO.h"
@@ -236,7 +235,6 @@ CRenderTarget::CRenderTarget		()
 	b_luminance						= xr_new<CBlender_luminance>			();
 	b_combine						= xr_new<CBlender_combine>				();
 	b_blit							= xr_new<CBlender_blit>					(); 
-	b_accum_raytraced_shadows		= xr_new<CBlender_raytraced_shadows>	();
 	b_accum_ambient					= xr_new<CBlender_ambient>				();
 	b_accum_ssgi				= xr_new<CBlender_ssgi>				();
 	b_motionVector					= xr_new<CBlender_motionVector>			();
@@ -378,12 +376,6 @@ CRenderTarget::CRenderTarget		()
 	// REFLECTED
 	{
 		s_accum_reflected.create	(b_accum_reflected,			"r2\\accum_refl");
-	}
-
-	// RAYTRACED SHADOWS
-	{
-		s_accum_raytraced_shadows.create(b_accum_raytraced_shadows);
-		g_accum_raytraced_shadows.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
 	}
 
 	// AMBIENT
@@ -689,7 +681,6 @@ CRenderTarget::~CRenderTarget	()
 	xr_delete					(b_accum_mask			);
 	xr_delete					(b_occq					);
 	xr_delete					(b_blit					);
-	xr_delete					(b_accum_raytraced_shadows);
 	xr_delete					(b_accum_ambient		);
 	xr_delete					(b_accum_ssgi		);
 	xr_delete					(b_motionVector			);

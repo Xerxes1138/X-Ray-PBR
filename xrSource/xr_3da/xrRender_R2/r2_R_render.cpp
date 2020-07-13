@@ -387,13 +387,6 @@ void CRender::Render		()
 		Target->accum_direct_blend			();
 	}
 
-	// Screen Space Raytraced Shadows
-	if (0)
-	{
-		Target->accum_raytraced_shadows();
-	}
-	//
-
 	// Lighting, non dependant on OCCQ
 	Target->phase_accumulator				();
 	HOM.Disable								();

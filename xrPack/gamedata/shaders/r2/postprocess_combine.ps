@@ -92,7 +92,8 @@ float4 main(CombineVertexInput Input) : COLOR
 	float4 H = TangentToWorld(normalWorld, ImportanceSampleGGX(Xi, roughness));
 
 	float3 reflectWorld = reflect(viewDirectionWorld, H.xyz);
-
+	reflectWorld = RotateAroundYAxis(reflectWorld, dx_SkyRotation.x);
+	
 	float3 specularCube0 = SampleIBL(s_specular_s0, reflectWorld, mip);
 	float3 specularCube1 = SampleIBL(s_specular_s1, reflectWorld, mip);
 
@@ -104,7 +105,7 @@ float4 main(CombineVertexInput Input) : COLOR
 	
 	float4 ssao = tex2D(s_AO, uv);
 	
-	#ifdef STALKER_USE_STOCHASTIC_SSR
+	#ifdef STALKER_USE_STOCHASTIC_SSR // TODO : Exclude specularIndirect from skybox
 		float4 reflectionColor = tex2D(s_reflectionColor, uv);
 
 		currentColor += lerp(specularIndirect * ssao.w /* saturate(ambientOcclusionBaked)*/, reflectionColor.rgb, reflectionColor.a) * F_R;
