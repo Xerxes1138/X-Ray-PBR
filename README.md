@@ -1,6 +1,6 @@
 # X-Ray PBR
 
-An attempt at converting X-Ray 1.0 engine (SoC) to PBR.
+An attempt at converting X-Ray 1.0 engine (SoC) to PBR(ish).
 
 # FEATURES
 * SSAO (Crytek)
