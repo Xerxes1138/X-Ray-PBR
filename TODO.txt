@@ -1,0 +1,11 @@
+!Large scale AO (from an height map)!
+!Per object motion vector!
+!Reduce number of RTs being used!
+!G-Buffer optimization!
+Bloom
+GTAO
+SSGI
+Fix particle fading
+Real time Cubemap capture or at some interval time at player camera's position
+
+
