@@ -1,6 +1,6 @@
 # X-Ray PBR
 
-An attempt at converting X-Ray 1.0 engine (SoC) to PBR.
+An attempt at converting X-Ray 1.0 engine (SoC) to PBR(ish).
 
 # FEATURES
 * SSAO (Crytek)
@@ -12,6 +12,7 @@ An attempt at converting X-Ray 1.0 engine (SoC) to PBR.
 * Tonemap (ACES or Hable)
 
 # TODO
+* Large scale AO (from an height map)
 * Bloom
 * G-Buffer optimization
 * GTAO
