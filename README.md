@@ -11,15 +11,6 @@ An attempt at converting X-Ray 1.0 engine (SoC) to PBR(ish).
 * Contact Shadows
 * Tonemap (ACES or Hable)
 
-# TODO
-* Large scale AO (from an height map)
-* Bloom
-* G-Buffer optimization
-* GTAO
-* Per object motion vector
-* Fix particle fading
-* More ?
-
 # KNOWN ISSUES
 - MANY :) !
 - Temporal AA ghosting with moving objects
