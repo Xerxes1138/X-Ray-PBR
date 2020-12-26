@@ -1,29 +1,39 @@
 #pragma once
 
 // r3xx code-path (MRT)
-#define		r2_RT_depth				"$user$depth"			// MRT
+#define		r2_RT_specular			"$user$specular"		// MRT
 #define		r2_RT_P					"$user$position"		// MRT
 #define		r2_RT_N					"$user$normal"			// MRT
 #define		r2_RT_albedo			"$user$albedo"			// MRT
 
-#define		r2_RT_AO				"$user$AO"				// MRT
-#define		r2_RT_motionVector		"$user$motionVector"			// MRT
+#define		r2_RT_motionVector		"$user$motionVector"
 
-//
-#define		r2_RT_SSR_Raycast				"$user$ssr_raycast"		// MRT
-#define		r2_RT_SSR_Reflection			"$user$ssr_reflection"		// ---
-#define		r2_RT_SSR_Reflection_Previous	"$user$ssr_reflection_previous"		// ---
+// SSAO
+#define		r2_RT_AO				"$user$AO"
+#define		r2_RT_AO_Resolve		"$user$AO_Resolve"
+#define		r2_RT_AO_Temporal		"$user$AO_Temporal"
+
+// SSR
+#define		r2_RT_SSR_Raycast				"$user$ssr_raycast"
+#define		r2_RT_SSR_Reflection			"$user$ssr_reflection"		
+#define		r2_RT_SSR_Reflection_Previous	"$user$ssr_reflection_previous"
+
+// SSGI
+#define		r2_RT_SSGI_Raycast				"$user$ssgi_raycast"
+#define		r2_RT_SSGI_Resolve				"$user$ssgi_resolve"
+#define		r2_RT_SSGI_Combine				"$user$ssgi_combine"
+#define		r2_RT_SSGI						"$user$ssgi"
+#define		r2_RT_SSGI_Previous				"$user$ssgi_previous"
 
 // TODO : Use r2_RT_motionVector zw ?
-#define		r2_RT_distortion				"$user$distortion"		// ---
+#define		r2_RT_distortion				"$user$distortion"
 
 // TAA
-#define		r2_RT_currentColor				"$user$current_color"		// MRT
-#define		r2_RT_previousColor				"$user$previous_color"		// MRT
+#define		r2_RT_currentColor				"$user$current_color"
+#define		r2_RT_previousColor				"$user$previous_color"
 
 // other
 #define		r2_RT_accum			"$user$accum"			// ---	16 bit fp or 16 bit fx
-#define		r2_RT_accum_ssgi	"$user$accum_ssgi"		// ---	16 bit fp - only for HW which doesn't feature fp16 blend
 #define		r2_RT_accumSpecular	"$user$accumSpecular"			// ---	16 bit fp or 16 bit fx
 #define		r2_RT_accum_temp	"$user$accum_temp"		// ---	16 bit fp - only for HW which doesn't feature fp16 blend
 
@@ -71,6 +81,8 @@ const		u32					TEX_jitter_count	= 4		;
 const		u32					BLOOM_size_X		= 256	;
 const		u32					BLOOM_size_Y		= 256	;
 const		u32					LUMINANCE_size		= 16	;
+
+#define		SE_SUN_RAIN_SMAP	3
 
 // deffer
 #define		SE_R2_NORMAL_HQ		0	// high quality/detail

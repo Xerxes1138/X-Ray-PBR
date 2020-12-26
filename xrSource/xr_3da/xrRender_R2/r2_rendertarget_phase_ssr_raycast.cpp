@@ -13,6 +13,7 @@ void CRenderTarget::phase_ssr_raycast ()
 		Fvector2	p0,p1;
 
 		u_setrt	(rt_SSR_Raycast, NULL, NULL, NULL, HW.pBaseZB);
+		RCache.set_ColorWriteEnable	();
 		//CHK_DX(HW.pDevice->Clear	( 0L, NULL, D3DCLEAR_TARGET, 0x0, 1.0f, 0L));
 		RCache.set_CullMode( CULL_NONE );
 		RCache.set_Stencil(FALSE);
@@ -87,5 +88,87 @@ void CRenderTarget::phase_ssr_raycast ()
 
 		RCache.set_Geometry			(g_postprocess_ssr);
 		RCache.Render				(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
+		RCache.set_ColorWriteEnable	(FALSE);
+	}
+
+	if(1)
+	{
+		CEnvDescriptorMixer& environment = g_pGamePersistent->Environment().CurrentEnv;
+
+		u32			Offset = 0;
+		Fvector2	p0,p1;
+
+		u_setrt	(rt_SSGI_Raycast, NULL, NULL, NULL, HW.pBaseZB);
+		RCache.set_ColorWriteEnable	();
+		//CHK_DX(HW.pDevice->Clear	( 0L, NULL, D3DCLEAR_TARGET, 0x0, 1.0f, 0L));
+		RCache.set_CullMode( CULL_NONE );
+		RCache.set_Stencil(FALSE);
+
+		struct v_postprocess_ssgi
+		{
+			Fvector4	position;
+			Fvector2	uv0;
+		};
+
+		float	_w					= float(Device.dwWidth) / 2;
+		float	_h					= float(Device.dwHeight) / 2;
+
+		float du = 0.5f / _w;
+		float dv = 0.5f / _h;
+
+		p0.set(du, dv);
+		p1.set((_w + 0.5f) / _w, (_h + 0.5f) / _h);
+
+		// Fill vertex buffer
+		v_postprocess_ssgi* pv = (v_postprocess_ssgi*) RCache.Vertex.Lock(4, g_postprocess_ssgi->vb_stride, Offset);
+		pv->position.set(EPS, float(_h + EPS), EPS, 1.f);
+		pv->uv0.set(p0.x, p1.y);
+		pv++;
+
+		pv->position.set(EPS, EPS,	EPS, 1.f);
+		pv->uv0.set(p0.x, p0.y);
+		pv++;
+
+		pv->position.set(float(_w + EPS), float(_h + EPS), EPS, 1.f); 
+		pv->uv0.set(p1.x, p1.y);
+		pv++;
+
+		pv->position.set(float(_w + EPS), EPS, EPS, 1.f); 
+		pv->uv0.set(p1.x, p0.y); 
+		pv++;
+		
+		RCache.Vertex.Unlock(4, g_postprocess_ssgi->vb_stride);
+
+		RCache.set_Shader	(s_postprocess_ssgi);
+
+		Fvector4 screenSize = {_w, _h, 1.0f / _w, 1.0f / _h};
+
+		RCache.set_c("dx_ScreenSize",	screenSize);
+
+		Fvector4 SSGIParams = {ps_r2_ssgi_ray_length, ps_r2_ssgi_ray_thickness, ps_r2_ssgi_atten_border, ps_r2_ssgi_temporal_response};
+		RCache.set_c("dx_SSGI_Params", SSGIParams);
+
+		Fmatrix	ViewMatrix; ViewMatrix.set(Device.mView);
+		Fmatrix	ProjectioMatrix; ProjectioMatrix.set(Device.mProject);
+		Fmatrix	InverseProjectioMatrix; InverseProjectioMatrix.invert(Device.mProject);
+
+		Fmatrix	ViewProjectionMatrix;
+		ViewProjectionMatrix.mul(ViewMatrix, ProjectioMatrix);
+
+		Fmatrix	InverseViewProjectionMatrix;
+		InverseViewProjectionMatrix.invert(ViewProjectionMatrix);
+
+		Fmatrix	CameraToWorldMatrix; CameraToWorldMatrix.invert(Device.mView);
+
+		// TODO : Move this to standard binding
+		RCache.set_c("dx_matrix_Projection", ProjectioMatrix);
+		RCache.set_c("dx_matrix_CameraToWorld", CameraToWorldMatrix);
+		RCache.set_c("dx_matrix_InverseProjection", InverseProjectioMatrix);
+		RCache.set_c("dx_matrix_ViewProjection", ViewProjectionMatrix);
+		RCache.set_c("dx_matrix_InverseViewProjection",	InverseViewProjectionMatrix);
+
+		RCache.set_Geometry			(g_postprocess_ssgi);
+		RCache.Render				(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
+		RCache.set_ColorWriteEnable	(FALSE);
 	}
 }

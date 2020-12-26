@@ -19,6 +19,7 @@ void	CEnvModifier::load	(IReader* fs)
 	far_plane		= fs->r_float	();
 	fs->r_fvector3	(fog_color);
 	fog_density		= fs->r_float	();
+	//fog_exp			= fs->r_float	();
 	fs->r_fvector3	(ambient);
 	fs->r_fvector3	(sky_color);
 	fs->r_fvector3	(hemi_color);
@@ -33,6 +34,9 @@ float	CEnvModifier::sum	(CEnvModifier& M, Fvector3& view)
 	far_plane			+=	M.far_plane*_power;
 	fog_color.mad		(M.fog_color,_power);
 	fog_density			+=	M.fog_density*_power;
+
+	//fog_exp				+=	M.fog_exp*_power;
+
 	ambient.mad			(M.ambient,_power);
 //	lmap_color.mad		(M.lmap_color,_power);
 	sky_color.mad		(M.sky_color,_power);
@@ -97,6 +101,7 @@ CEnvDescriptor::CEnvDescriptor()
 	far_plane			= 400.0f;;
 
 	fog_color.set		(1,1,1);
+	fog_exp				= 0.001f;
 	fog_density			= 0.0f;
 	fog_distance		= 400.0f;
 
@@ -153,6 +158,7 @@ void CEnvDescriptor::load	(LPCSTR exec_tm, LPCSTR S, CEnvironment* parent)
 	fog_color				= pSettings->r_fvector3	(S,"fog_color");
 
 	fog_density				= pSettings->r_float	(S,"fog_density");
+	fog_exp					= pSettings->r_float	(S,"fog_exp");
 	fog_distance			= pSettings->r_float	(S,"fog_distance");
 	rain_density			= pSettings->r_float	(S,"rain_density");		clamp(rain_density,0.f,1.f);
 
@@ -262,6 +268,9 @@ void CEnvDescriptorMixer::lerp	(CEnvironment* , CEnvDescriptor& A, CEnvDescripto
 	far_plane				=	(fi*A.far_plane + f*B.far_plane + M.far_plane)*psVisDistance*_power;
 	fog_color.lerp(A.fog_color, B.fog_color,f);
 	fog_density				=	(fi*A.fog_density + f*B.fog_density + M.fog_density)*_power;
+
+	fog_exp					=	(fi*A.fog_exp + f*B.fog_exp);
+
 	fog_distance			=	(fi*A.fog_distance + f*B.fog_distance);
 	fog_near				=	(1.0f - fog_density)*0.85f * fog_distance;
 	fog_far					=	0.99f * fog_distance;

@@ -136,6 +136,7 @@ public:
 	IRender_Sector*					rimp_detectSector			(Fvector& P, Fvector& D);
 	void							render_main					(Fmatrix& mCombined, bool _fportals);
 	void							render_forward				();
+	void							render_rain					();
 	void							render_smap_direct			(Fmatrix& mCombined);
 	void							render_indirect				(light*			L	);
 	void							render_lights				(light_Package& LP	);
@@ -184,7 +185,8 @@ public:
 #ifdef	DEBUG
 		if (ps_r2_ls_flags.test(R2FLAG_GLOBALMATERIAL))	mtl=ps_r2_gmaterial;
 #endif
-		RCache.set_c		(c_lmaterial, o_hemi, o_sun,0, (mtl+.5f)/4.f);
+		RCache.set_c		(c_lmaterial, o_hemi, o_sun, 0 , mtl); 		//RCache.set_c		(c_lmaterial, o_hemi, o_sun,0, (mtl+.5f)/4.f);
+
 	}
 
 public:

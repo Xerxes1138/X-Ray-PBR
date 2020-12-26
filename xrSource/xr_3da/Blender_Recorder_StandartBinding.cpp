@@ -67,7 +67,9 @@ class cl_fog_params	: public R_constant_setup {
 			float	n		= g_pGamePersistent->Environment().CurrentEnv.fog_near	;
 			float	f		= g_pGamePersistent->Environment().CurrentEnv.fog_far		;
 			float	r		= 1/(f-n);
-			result.set		(-n*r, r, d, r);
+			float	e		= g_pGamePersistent->Environment().CurrentEnv.fog_exp;
+
+			result.set		(-n*r, e, d, r);
 		}
 		RCache.set_c	(C,result);
 	}
@@ -286,6 +288,42 @@ static class cl_current_projection : public R_constant_setup
 } 
 binder_current_projection;
 
+static class cl_skyParams : public R_constant_setup
+{
+    virtual void setup(R_constant* C)
+	{
+		float skyRotation = g_pGamePersistent->Environment().CurrentEnv.sky_rotation;
+
+		Fvector4 skyParams = {skyRotation, 0.0f, 0.0f, 0.0f};
+
+        RCache.set_c(C, skyParams);
+    }
+} 
+binder_skyParams;
+
+static class cl_previousProjection : public R_constant_setup
+{
+    virtual void setup(R_constant* C)
+	{
+		Fmatrix		m_previous, m_current, m_currentView;
+		static Fmatrix	m_saved_viewproj;
+
+		m_currentView.set(RCache.get_xform_view());
+
+		Fmatrix	m_invview;
+		m_invview.invert(m_currentView);
+
+		m_previous.mul(m_saved_viewproj, m_invview);
+
+		m_current.set(RCache.get_xform_project());
+
+		m_saved_viewproj.mul(m_current, m_currentView);
+
+        RCache.set_c(C, m_previous);
+    }
+} 
+binder_previousProjection;
+
 // Standart constant-binding
 void	CBlender_Compile::SetMapping	()
 {
@@ -293,6 +331,7 @@ void	CBlender_Compile::SetMapping	()
 	r_Constant				("m_W",				&binder_w);
 	r_Constant				("m_V",				&binder_v);
 	r_Constant				("m_P",				&binder_p);
+	r_Constant				("m_previous_P",	&binder_previousProjection);
 	r_Constant				("m_WV",			&binder_wv);
 	r_Constant				("m_VP",			&binder_vp);
 	r_Constant				("m_WVP",			&binder_wvp);
@@ -338,4 +377,5 @@ void	CBlender_Compile::SetMapping	()
 
 	r_Constant				("dx_Current_Projection", &binder_current_projection);
 	r_Constant				("dx_Previous_Projection", &binder_previous_projection);
+	r_Constant				("dx_SkyRotation", &binder_skyParams);
 }

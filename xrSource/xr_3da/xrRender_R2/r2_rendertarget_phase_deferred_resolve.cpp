@@ -28,7 +28,7 @@ void CRenderTarget::phase_deferred_resolve()
 		RCache.set_ColorWriteEnable();
 		CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, FALSE));
 		g_pGamePersistent->Environment().RenderSky();
-		g_pGamePersistent->Environment().RenderClouds();
+		//g_pGamePersistent->Environment().RenderClouds();
 		CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, TRUE));
 
 		// Mask

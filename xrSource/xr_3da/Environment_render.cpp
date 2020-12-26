@@ -136,8 +136,8 @@ void CEnvironment::RenderSky		()
 	RCache.Render				(D3DPT_TRIANGLELIST,v_offset,0,12,i_offset,20);
 
 	// Sun
-	/*::Render->rmNormal			();
-	eff_LensFlare->Render		(TRUE,FALSE,FALSE);*/
+	::Render->rmNormal			();
+	/*eff_LensFlare->Render		(TRUE,FALSE,FALSE);*/
 }
 
 void CEnvironment::RenderClouds			()

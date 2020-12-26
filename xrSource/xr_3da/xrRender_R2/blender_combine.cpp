@@ -25,7 +25,7 @@ void	CBlender_combine::Compile(CBlender_Compile& C)
 
 		C.r_Sampler_rtf		("s_accumulatorSpecular",	r2_RT_accumSpecular);
 
-		C.r_Sampler_rtf		("s_depth",					r2_RT_depth);
+		C.r_Sampler_rtf		("s_specular",					r2_RT_specular);
 		C.r_Sampler_rtf		("s_tonemap",				r2_RT_luminance_cur);
 		C.r_Sampler_clw		("s_material",				r2_material);
 
@@ -46,7 +46,7 @@ void	CBlender_combine::Compile(CBlender_Compile& C)
 		C.r_Sampler_clf		("s_image",			r2_RT_generic0);
 		C.r_Sampler_clf		("s_bloom",			r2_RT_bloom1);
 		C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
-		C.r_Sampler_rtf		("s_depth",			r2_RT_depth);
+		C.r_Sampler_rtf		("s_specular",					r2_RT_specular);
 
 		C.r_Sampler_rtf		("s_accumulatorSpecular",	r2_RT_accumSpecular);
 				C.r_Sampler_rtf		("s_currentColor",	r2_RT_currentColor);
@@ -69,7 +69,7 @@ void	CBlender_combine::Compile(CBlender_Compile& C)
 		C.r_Sampler_clf		("s_image",			r2_RT_generic0);
 		C.r_Sampler_clf		("s_bloom",			r2_RT_bloom1);
 		C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
-		C.r_Sampler_rtf		("s_depth",			r2_RT_depth);
+		C.r_Sampler_rtf		("s_specular",					r2_RT_specular);
 
 		C.r_Sampler_rtf		("s_accumulatorSpecular",	r2_RT_accumSpecular);
 				C.r_Sampler_rtf		("s_currentColor",	r2_RT_currentColor);
@@ -92,7 +92,7 @@ void	CBlender_combine::Compile(CBlender_Compile& C)
 		C.r_Sampler_clf		("s_image",			r2_RT_generic0);
 		C.r_Sampler_clf		("s_bloom",			r2_RT_bloom1);
 		C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
-		C.r_Sampler_rtf		("s_depth",			r2_RT_depth);
+		C.r_Sampler_rtf		("s_specular",					r2_RT_specular);
 
 		C.r_Sampler_rtf		("s_accumulatorSpecular",	r2_RT_accumSpecular);
 				C.r_Sampler_rtf		("s_currentColor",	r2_RT_currentColor);
@@ -115,7 +115,7 @@ void	CBlender_combine::Compile(CBlender_Compile& C)
 		C.r_Sampler_clf		("s_image",			r2_RT_generic0);
 		C.r_Sampler_clf		("s_bloom",			r2_RT_bloom1);
 		C.r_Sampler_clf		("s_distort",		r2_RT_generic1);
-		C.r_Sampler_rtf		("s_depth",			r2_RT_depth);
+		C.r_Sampler_rtf		("s_specular",					r2_RT_specular);
 
 		C.r_Sampler_rtf		("s_accumulatorSpecular",	r2_RT_accumSpecular);
 

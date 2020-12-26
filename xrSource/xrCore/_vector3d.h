@@ -184,9 +184,13 @@ public:
         return len;
 	}
 
+	//sqrt(vec2.x*vec2.x + vec2.y*vec2.y);
+
 	ICF	SelfRef normalize(void) 
 	{
-		VERIFY(square_magnitude() > std::numeric_limits<T>::min());
+		// Removing this because it looks like that the normalize function is also on vector that has a magnitude not equal to 1
+		//VERIFY(square_magnitude() > flt_zero);
+		//VERIFY(square_magnitude() > std::numeric_limits<T>::min());
 		T mag=_sqrt(T(1)/(x*x + y*y + z*z));
 		x *= mag;
 		y *= mag;

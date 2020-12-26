@@ -21,6 +21,7 @@
 #include "blender_postprocess_stochastic_bloom.h"
 #include "blender_postprocess_taa.h"
 #include "blender_postprocess_tonemap.h"
+#include "blender_rain.h"
 
 void	CRenderTarget::u_setrt			(const ref_rt& _1, const ref_rt& _2, const ref_rt& _3, const ref_rt& _4, IDirect3DSurface9* zb)
 {
@@ -225,34 +226,44 @@ CRenderTarget::CRenderTarget		()
 	Device.Resources->Evict			();
 
 	// Blenders
-	b_occq							= xr_new<CBlender_light_occq>			();
-	b_accum_mask					= xr_new<CBlender_accum_direct_mask>	();
-	b_accum_direct					= xr_new<CBlender_accum_direct>			();
-	b_accum_point					= xr_new<CBlender_accum_point>			();
-	b_accum_spot					= xr_new<CBlender_accum_spot>			();
-	b_accum_reflected				= xr_new<CBlender_accum_reflected>		();
-	b_bloom							= xr_new<CBlender_bloom_build>			();
-	b_luminance						= xr_new<CBlender_luminance>			();
-	b_combine						= xr_new<CBlender_combine>				();
-	b_blit							= xr_new<CBlender_blit>					(); 
-	b_accum_ambient					= xr_new<CBlender_ambient>				();
-	b_accum_ssgi				= xr_new<CBlender_ssgi>				();
-	b_motionVector					= xr_new<CBlender_motionVector>			();
-
-	b_postprocess_AO				= xr_new<CBlender_postprocess_AO>		();
-	b_postprocess_ssr				= xr_new<CBlender_postprocess_ssr>		();
+	b_occq							= xr_new<CBlender_light_occq>					();
+	b_accum_mask					= xr_new<CBlender_accum_direct_mask>			();
+	b_accum_direct					= xr_new<CBlender_accum_direct>					();
+	b_accum_point					= xr_new<CBlender_accum_point>					();
+	b_accum_spot					= xr_new<CBlender_accum_spot>					();
+	b_accum_reflected				= xr_new<CBlender_accum_reflected>				();
+	b_bloom							= xr_new<CBlender_bloom_build>					();
+	b_luminance						= xr_new<CBlender_luminance>					();
+	b_combine						= xr_new<CBlender_combine>						();
+	b_blit							= xr_new<CBlender_blit>							(); 
+	b_blit_taa						= xr_new<CBlender_blit_taa>						(); 
+	b_accum_ambient					= xr_new<CBlender_ambient>						();
+	b_motionVector					= xr_new<CBlender_motionVector>					();
+	b_rain							= xr_new<CBlender_rain>							();
+	b_postprocess_AO				= xr_new<CBlender_postprocess_AO>				();
+	b_postprocess_AO_resolve		= xr_new<CBlender_postprocess_AO_resolve>		();
+	b_postprocess_AO_temporal		= xr_new<CBlender_postprocess_AO_temporal>		();
+	b_postprocess_ssgi				= xr_new<CBlender_postprocess_ssgi>				();
+	b_postprocess_ssgi_resolve		= xr_new<CBlender_postprocess_ssgi_resolve>		();
+	b_postprocess_ssgi_temporal		= xr_new<CBlender_postprocess_ssgi_temporal>	();
+	b_blit_ssao						= xr_new<CBlender_blit_ssao>					();
+	b_blit_ssgi						= xr_new<CBlender_blit_ssgi>					();
+	b_blit_ssgi_recursive			= xr_new<CBlender_blit_ssgi_recursive>			();
+	b_postprocess_ssr				= xr_new<CBlender_postprocess_ssr>				();
 	b_postprocess_ssr_temporal		= xr_new<CBlender_postprocess_ssr_temporal>		();
-	b_blit_ssr						= xr_new<CBlender_blit_ssr>				();
-
+	b_blit_ssr						= xr_new<CBlender_blit_ssr>						();
 	b_postprocess_reflection		= xr_new<CBlender_postprocess_reflection>();
-
 	b_postprocess_combine		= xr_new<CBlender_postprocess_combine>();
-
+	b_postprocess_fog_scattering		= xr_new<CBlender_postprocess_fog_scattering>();
 	b_postprocess_bloom_prepass		= xr_new<CBlender_postprocess_bloom_prepass>();
 	b_postprocess_stochastic_bloom	= xr_new<CBlender_postprocess_stochastic_bloom>();
 	b_postprocess_taa				= xr_new<CBlender_postprocess_taa>		();
 	b_postprocess_tonemap_exposure			= xr_new<CBlender_postprocess_tonemap_exposure>	();
 	b_postprocess_tonemap			= xr_new<CBlender_postprocess_tonemap>	();
+
+	// Rain
+	s_rain.create(b_rain);
+	g_rain.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
 
 	// Blit
 	s_blit.create(b_blit);
@@ -263,7 +274,7 @@ CRenderTarget::CRenderTarget		()
 		u32	w = Device.dwWidth, h = Device.dwHeight;
 
 		// TODO : Change G-Buffer layout !
-		rt_SpecularColor.create(r2_RT_depth, w, h, D3DFMT_A8R8G8B8); 
+		rt_SpecularColor.create(r2_RT_specular, w, h, D3DFMT_A8R8G8B8); 
 		rt_Position.create(r2_RT_P,	w, h, D3DFMT_A32B32G32R32F);
 		rt_Normal.create(r2_RT_N, w, h, D3DFMT_A16B16G16R16F);
 
@@ -282,18 +293,70 @@ CRenderTarget::CRenderTarget		()
 			rt_SSR_Raycast.create(r2_RT_SSR_Raycast, ssrRaycastWidth, ssrRaycastHeight, D3DFMT_A16B16G16R16F);
 		}
 
-		//
-		rt_AO.create(r2_RT_AO,	w / 2, h / 2, D3DFMT_A16B16G16R16F);
-		s_postprocess_AO.create(b_postprocess_AO);
-		g_postprocess_AO.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+		// SSGI
+		{
+			rt_SSGI_Combine.create(r2_RT_SSGI_Combine, w, h, D3DFMT_A16B16G16R16F);
+
+			s_blit_ssgi_recursive.create(b_blit_ssgi_recursive);
+			g_blit_ssgi_recursive.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
+			s_postprocess_ssgi.create(b_postprocess_ssgi);
+			g_postprocess_ssgi.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
+			rt_SSGI_Raycast.create(r2_RT_SSGI_Raycast, w / 2, h / 2, D3DFMT_A16B16G16R16F);
+
+			s_postprocess_ssgi_resolve.create(b_postprocess_ssgi_resolve);
+			g_postprocess_ssgi_resolve.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
+			rt_SSGI_Resolve.create(r2_RT_SSGI_Resolve, w, h, D3DFMT_A16B16G16R16F);
+
+			// SSGI TEMPORAL
+			{
+				u32	w = Device.dwWidth, h = Device.dwHeight;
+
+				rt_SSGI.create(r2_RT_SSGI,w,h, D3DFMT_A16B16G16R16F);
+				rt_SSGI_Previous.create(r2_RT_SSGI_Previous,w,h, D3DFMT_A16B16G16R16F);
+
+				s_postprocess_ssgi_temporal.create(b_postprocess_ssgi_temporal);
+				g_postprocess_ssgi_temporal.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
+				s_blit_ssgi.create(b_blit_ssgi);
+				g_blit_ssgi.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+			}
+		}
+
+		// SSAO
+		{
+			rt_AO.create(r2_RT_AO,	w / 2, h / 2, D3DFMT_A8R8G8B8);
+
+			s_postprocess_AO.create(b_postprocess_AO);
+			g_postprocess_AO.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
+			// SSAO RESOLVE
+			{
+				rt_AO_Resolve.create(r2_RT_AO_Resolve, w, h, D3DFMT_A8R8G8B8);
+
+				s_postprocess_AO_resolve.create(b_postprocess_AO_resolve);
+				g_postprocess_AO_resolve.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
+				// SSAO TEMPORAL
+				if(1)
+				{
+					rt_AO_Temporal.create(r2_RT_AO_Temporal, w, h, D3DFMT_A8R8G8B8);
+
+					s_postprocess_AO_temporal.create(b_postprocess_AO_temporal);
+					g_postprocess_AO_temporal.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
+					s_blit_ssao.create(b_blit_ssao);
+					g_blit_ssao.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+				}
+			}
+		}
 
 		//
 		rt_motionVector.create(r2_RT_motionVector,	w, h, D3DFMT_A16B16G16R16F);
 		s_motionVector.create(b_motionVector);
 		g_motionVector.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
-
-
-		rt_Accumulator_SSGI.create	(r2_RT_accum_ssgi,w,h, D3DFMT_A16B16G16R16F);
 
 		// select albedo & accum
 		if (RImplementation.o.mrtmixdepth)	
@@ -382,9 +445,6 @@ CRenderTarget::CRenderTarget		()
 	{
 		s_accum_ambient.create(b_accum_ambient);
 		g_accum_ambient.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
-
-		s_accum_ssgi.create(b_accum_ssgi);
-		g_accum_ssgi.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
 	}
 
 	// SSR
@@ -418,6 +478,9 @@ CRenderTarget::CRenderTarget		()
 		g_postprocess_combine.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
 	}
 
+	s_postprocess_fog_scattering.create(b_postprocess_fog_scattering);
+	g_postprocess_fog_scattering.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
 	// BLOOM
 	{
 		s_postprocess_bloom_prepass.create(b_postprocess_bloom_prepass);
@@ -447,22 +510,25 @@ CRenderTarget::CRenderTarget		()
 
 	// TAA
 	{
-	u32	w = Device.dwWidth, h = Device.dwHeight;
+		s_blit_taa.create(b_blit_taa);
+		g_blit_taa.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
 
-	static D3DVERTEXELEMENT9 dwDecl[] =
-	{
-		{ 0, 0,  D3DDECLTYPE_FLOAT4,	D3DDECLMETHOD_DEFAULT, 	D3DDECLUSAGE_POSITION,	0 }, D3DDECL_END()
-	};
+		u32	w = Device.dwWidth, h = Device.dwHeight;
+
+		static D3DVERTEXELEMENT9 dwDecl[] =
+		{
+			{ 0, 0,  D3DDECLTYPE_FLOAT4,	D3DDECLMETHOD_DEFAULT, 	D3DDECLUSAGE_POSITION,	0 }, D3DDECL_END()
+		};
 
 
-	s_postprocess_taa.create(b_postprocess_taa);
+		s_postprocess_taa.create(b_postprocess_taa);
 
-	//g_postprocess_taa.create(dwDecl, RCache.Vertex.Buffer(), RCache.QuadIB);
+		//g_postprocess_taa.create(dwDecl, RCache.Vertex.Buffer(), RCache.QuadIB);
 
-	g_postprocess_taa.create(D3DFVF_XYZRHW|D3DFVF_TEX2|D3DFVF_TEXCOORDSIZE2(0)|D3DFVF_TEXCOORDSIZE2(1), RCache.Vertex.Buffer(), RCache.QuadIB);
+		g_postprocess_taa.create(D3DFVF_XYZRHW|D3DFVF_TEX2|D3DFVF_TEXCOORDSIZE2(0)|D3DFVF_TEXCOORDSIZE2(1), RCache.Vertex.Buffer(), RCache.QuadIB);
 
-	rt_currentColor.create(r2_RT_currentColor, w, h, D3DFMT_A16B16G16R16F);
-	rt_previousColor.create(r2_RT_previousColor, w, h, D3DFMT_A16B16G16R16F);
+		rt_currentColor.create(r2_RT_currentColor, w, h, D3DFMT_A16B16G16R16F);
+		rt_previousColor.create(r2_RT_previousColor, w, h, D3DFMT_A16B16G16R16F);
 	}
 
 	// TONEMAP
@@ -671,28 +737,37 @@ CRenderTarget::~CRenderTarget	()
 	accum_point_geom_destroy	();
 
 	// Blenders
-	xr_delete					(b_combine				);
-	xr_delete					(b_luminance			);
-	xr_delete					(b_bloom				);
-	xr_delete					(b_accum_reflected		);
-	xr_delete					(b_accum_spot			);
-	xr_delete					(b_accum_point			);
-	xr_delete					(b_accum_direct			);
-	xr_delete					(b_accum_mask			);
-	xr_delete					(b_occq					);
-	xr_delete					(b_blit					);
-	xr_delete					(b_accum_ambient		);
-	xr_delete					(b_accum_ssgi		);
-	xr_delete					(b_motionVector			);
+	xr_delete					(b_combine);
+	xr_delete					(b_luminance);
+	xr_delete					(b_bloom);
+	xr_delete					(b_accum_reflected);
+	xr_delete					(b_accum_spot);
+	xr_delete					(b_accum_point);
+	xr_delete					(b_accum_direct);
+	xr_delete					(b_accum_mask);
+	xr_delete					(b_occq);
+	xr_delete					(b_blit);
+	xr_delete					(b_blit_taa);
+	xr_delete					(b_accum_ambient);
+	xr_delete					(b_motionVector);
 	xr_delete					(b_postprocess_AO);
+	xr_delete					(b_postprocess_AO_resolve);
+	xr_delete					(b_postprocess_AO_temporal);
 	xr_delete					(b_postprocess_ssr);
+	xr_delete					(b_postprocess_ssgi);
+	xr_delete					(b_postprocess_ssgi_resolve);
+	xr_delete					(b_postprocess_ssgi_temporal);
+	xr_delete					(b_blit_ssao);
+	xr_delete					(b_blit_ssgi);
+	xr_delete					(b_blit_ssgi_recursive);
 	xr_delete					(b_postprocess_reflection);
 	xr_delete					(b_postprocess_combine);
+	xr_delete					(b_postprocess_fog_scattering);
 	xr_delete					(b_postprocess_ssr_temporal);
-	xr_delete					(b_blit_ssr				);
+	xr_delete					(b_blit_ssr);
 	xr_delete					(b_postprocess_bloom_prepass);
 	xr_delete					(b_postprocess_stochastic_bloom);
-	xr_delete					(b_postprocess_taa		);
+	xr_delete					(b_postprocess_taa);
 	xr_delete					(b_postprocess_tonemap_exposure);
-	xr_delete					(b_postprocess_tonemap	);
+	xr_delete					(b_postprocess_tonemap);
 }

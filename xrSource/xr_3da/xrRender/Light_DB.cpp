@@ -144,6 +144,7 @@ void			CLight_DB::Update			()
 		light*	_sun_adapted		= (light*) sun_adapted._get();
 		CEnvDescriptor&	E			= g_pGamePersistent->Environment().CurrentEnv;
 		VERIFY						(_valid(E.sun_dir));
+/*
 #ifdef DEBUG
 		if(E.sun_dir.y>=0)
 		{
@@ -155,13 +156,14 @@ void			CLight_DB::Update			()
 			Log("E.rain_color",E.rain_color);
 			Log("E.rain_density",E.rain_density);
 			Log("E.fog_distance",E.fog_distance);
+			Log("E.fog_exp",E.fog_exp);
 			Log("E.fog_density",E.fog_density);
 			Log("E.fog_color",E.fog_color);
 			Log("E.far_plane",E.far_plane);
 			Log("E.sky_rotation",E.sky_rotation);
 			Log("E.sky_color",E.sky_color);
 		}
-#endif
+#endif*/
 		VERIFY2						(E.sun_dir.y<0,"Invalid sun direction settings in evironment-config");
 		Fvector						OD,OP,AD,AP;
 		OD.set						(E.sun_dir).normalize			();

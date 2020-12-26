@@ -27,6 +27,7 @@ public:
 	IBlender*					b_combine;
 	IBlender*					b_blit;
 
+
 #ifdef DEBUG
 	struct		dbg_line_t		{
 		Fvector	P0,P1;
@@ -45,16 +46,22 @@ public:
 	ref_rt						rt_SpecularColor;
 
 	ref_rt						rt_AO;
+	ref_rt						rt_AO_Resolve;
+	ref_rt						rt_AO_Temporal;
 
 	// 
 	ref_rt						rt_Accumulator;
-
-	ref_rt						rt_Accumulator_SSGI;
 	ref_rt						rt_AccumulatorSpecular;
 
 	ref_rt						rt_Accumulator_temp;
 
 	ref_rt						rt_SSR_Raycast;
+
+	ref_rt						rt_SSGI_Raycast;
+	ref_rt						rt_SSGI_Resolve;
+	ref_rt						rt_SSGI_Combine;
+	ref_rt						rt_SSGI;
+	ref_rt						rt_SSGI_Previous;
 
 	ref_rt						rt_currentColor;
 	ref_rt						rt_previousColor;
@@ -108,6 +115,14 @@ private:
 	IBlender*					b_postprocess_AO;
 	ref_shader					s_postprocess_AO;
 	ref_geom					g_postprocess_AO;
+
+	IBlender*					b_postprocess_AO_resolve;
+	ref_shader					s_postprocess_AO_resolve;
+	ref_geom					g_postprocess_AO_resolve;
+
+	IBlender*					b_postprocess_AO_temporal;
+	ref_shader					s_postprocess_AO_temporal;
+	ref_geom					g_postprocess_AO_temporal;
 	//
 
 	// Accum Ambient
@@ -116,18 +131,24 @@ private:
 	ref_geom					g_accum_ambient;
 	//
 
-	// Accum SSGI
-	IBlender*					b_accum_ssgi;
-	ref_shader					s_accum_ssgi;
-	ref_geom					g_accum_ssgi;
-	//
-
 	// Motion Vector
 	IBlender*					b_motionVector;
 	ref_shader					s_motionVector;
 	ref_geom					g_motionVector;
 
 	// Post Process
+	IBlender*					b_postprocess_ssgi;
+	ref_shader					s_postprocess_ssgi;
+	ref_geom					g_postprocess_ssgi;
+
+	IBlender*					b_postprocess_ssgi_resolve;
+	ref_shader					s_postprocess_ssgi_resolve;
+	ref_geom					g_postprocess_ssgi_resolve;
+
+	IBlender*					b_postprocess_ssgi_temporal;
+	ref_shader					s_postprocess_ssgi_temporal;
+	ref_geom					g_postprocess_ssgi_temporal;
+
 	IBlender*					b_postprocess_ssr;
 	ref_shader					s_postprocess_ssr;
 	ref_geom					g_postprocess_ssr;
@@ -151,6 +172,10 @@ private:
 	IBlender*					b_postprocess_combine;
 	ref_shader					s_postprocess_combine;
 	ref_geom					g_postprocess_combine;
+
+	IBlender*					b_postprocess_fog_scattering;
+	ref_shader					s_postprocess_fog_scattering;
+	ref_geom					g_postprocess_fog_scattering;
 
 	IBlender*					b_postprocess_taa;
 	ref_shader					s_postprocess_taa;
@@ -201,13 +226,34 @@ private:
 	ref_shader					s_combine_dbg_Accumulator;
 	ref_shader					s_combine;
 
+	// Rain
+	ref_shader					s_rain;
+	IBlender*					b_rain;
+	ref_geom					g_rain;
+
 	// Blit
 	ref_shader					s_blit;
 	ref_geom					g_blit;
 
+	IBlender*					b_blit_ssao;
+	ref_shader					s_blit_ssao;
+	ref_geom					g_blit_ssao;
+
+	IBlender*					b_blit_ssgi;
+	ref_shader					s_blit_ssgi;
+	ref_geom					g_blit_ssgi;
+
+	IBlender*					b_blit_ssgi_recursive;
+	ref_shader					s_blit_ssgi_recursive;
+	ref_geom					g_blit_ssgi_recursive;
+
 	IBlender*					b_blit_ssr;
 	ref_shader					s_blit_ssr;
 	ref_geom					g_blit_ssr;
+
+	IBlender*					b_blit_taa;
+	ref_shader					s_blit_taa;
+	ref_geom					g_blit_taa;
 
 public:
 	ref_shader					s_postprocess;
@@ -264,6 +310,10 @@ public:
 	void						phase_postprocess_AO	();
 	void						phase_postprocess_reflection		();
 	void						phase_postprocess_combine();
+	void						phase_postprocess_fog_scattering();
+	void						phase_forward();
+	void						phase_rain();
+	void						draw_rain(light &RainSetup);
 	void						phase_postprocess_TAA	();
 	void						phase_wallmarks			();
 	void						phase_smap_direct		(light* L,	u32 sub_phase);

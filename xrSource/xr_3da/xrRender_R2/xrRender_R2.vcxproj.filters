@@ -294,6 +294,9 @@
     <ClInclude Include="..\..\xrSky\ArHosekSkyModelData_Spectral.h">
       <Filter>Sky</Filter>
     </ClInclude>
+    <ClInclude Include="blender_rain.h">
+      <Filter>Shading templates</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -661,6 +664,21 @@
     </ClCompile>
     <ClCompile Include="..\..\xrSky\ArHosekSkyModel.cpp">
       <Filter>Sky</Filter>
+    </ClCompile>
+    <ClCompile Include="r2_rendertarget_phase_forward.cpp">
+      <Filter>Core_Target</Filter>
+    </ClCompile>
+    <ClCompile Include="r2_rendertarget_phase_postprocess_fog_scattering.cpp">
+      <Filter>Core_Target</Filter>
+    </ClCompile>
+    <ClCompile Include="r2_rendertarget_phase_rain.cpp">
+      <Filter>Core_Target</Filter>
+    </ClCompile>
+    <ClCompile Include="r2_rendertarget_draw_rain.cpp">
+      <Filter>Core_Target</Filter>
+    </ClCompile>
+    <ClCompile Include="blender_rain.cpp">
+      <Filter>Shading templates</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

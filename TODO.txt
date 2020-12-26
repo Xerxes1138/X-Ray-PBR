@@ -1,4 +1,3 @@
-!Large scale AO (from an height map)!
 !Per object motion vector!
 !Reduce number of RTs being used!
 !G-Buffer optimization!

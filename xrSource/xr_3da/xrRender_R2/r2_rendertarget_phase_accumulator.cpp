@@ -37,12 +37,3 @@ void CRenderTarget::phase_accumulator()
 		RCache.set_ColorWriteEnable			();
 	}
 }
-
-void CRenderTarget::phase_accumulator_temp()
-{
-
-	u_setrt(rt_Accumulator_SSGI, NULL, NULL, NULL, NULL);
-	RCache.set_CullMode	(CULL_NONE	);
-	RCache.set_ColorWriteEnable	();
-	RCache.set_Stencil(FALSE);
-}

@@ -346,10 +346,14 @@ CInifile::Sect& CInifile::r_section( LPCSTR S )
 LPCSTR	CInifile::r_string(LPCSTR S, LPCSTR L)
 {
 	Sect&	I = r_section(S);
+
 	SectCIt	A = std::lower_bound(I.Data.begin(),I.Data.end(),L,item_pred);
-	if (A!=I.Data.end() && xr_strcmp(*A->first,L)==0)	return *A->second;
+
+	if (A!=I.Data.end() && xr_strcmp(*A->first,L)==0)
+		return *A->second;
 	else
 		Debug.fatal(DEBUG_INFO,"Can't find variable %s in [%s]",L,S);
+
 	return 0;
 }
 

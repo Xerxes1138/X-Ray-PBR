@@ -375,6 +375,18 @@ void CRender::Render		()
 	}
 
 	// RAIN
+	render_rain();
+	//
+
+	// Motion Vector
+	Target->phase_motionVector				();
+
+	// SSAO
+	Target->phase_postprocess_AO();
+	//
+
+	// SSR Ray Cast
+	Target->phase_ssr_raycast				();
 	//
 
 	// Directional light - fucking sun
@@ -395,19 +407,8 @@ void CRender::Render		()
 	// Lighting, dependant on OCCQ
 	render_lights							(LP_pending);
 
-	// SSAO
-	Target->phase_postprocess_AO();
-	//
-
-	// Emissive + Ambient lighting * SSAO + SSGI
+	// Emissive + Ambient lighting * SSAO
 	Target->accum_ambient();
-	//
-
-	// Motion Vector
-	Target->phase_motionVector				();
-
-	// SSR Ray Cast
-	Target->phase_ssr_raycast				();
 	//
 
 	// SSSSS
@@ -416,19 +417,27 @@ void CRender::Render		()
 	//
 
 	// Deferred resolve + SSSSS
-	Target->phase_deferred_resolve			();
+	Target->phase_deferred_resolve			(); // generic0
 	//
 
-	// SSR Resolve -> SSR Temporal
+	// FOG
+	Target->phase_postprocess_combine		(); // generic1
+	//
+
+	// FORWARD + FORWARD FOG
+	Target->phase_forward();  // generic1
+	//
+
+	// FOG SCATTERING
+	Target->phase_postprocess_fog_scattering(); // generic0
+	//
+
+	// SSGI + SSR Resolve -> SSGI + SSR Temporal
 	Target->phase_postprocess_reflection	();
 	//
 
-	// REFLECTION + SSR + FOG
-	Target->phase_postprocess_combine		();
-	//
-
 	// TAA
-	Target->phase_postprocess_TAA();
+	Target->phase_postprocess_TAA(); 
 	//
 
 	// Bloom
@@ -452,7 +461,6 @@ void CRender::render_forward				()
 	RImplementation.o.distortion				= RImplementation.o.distortion_enabled;	// enable distorion
 
 	//******* Main render - second order geometry (the one, that doesn't support deffering)
-	//.todo: should be done inside "combine" with estimation of of luminance, tone-mapping, etc.
 	{
 		// level
 		r_pmask									(false,true);			// enable priority "1"
@@ -464,7 +472,7 @@ void CRender::render_forward				()
 
 		r_dsgraph_render_sorted					()	;					// strict-sorted geoms
 
-		g_pGamePersistent->Environment().RenderLast()	;					// rain/thunder-bolts
+		//g_pGamePersistent->Environment().RenderLast()	;					// rain/thunder-bolts
 	}
 
 	RImplementation.o.distortion				= FALSE;				// disable distorion

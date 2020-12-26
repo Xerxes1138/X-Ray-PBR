@@ -1,0 +1,3 @@
+// X-Ray
+//
+// level details (grass) material ID is setup with GetMaterial() in TextureDescrManager.cpp

@@ -162,6 +162,12 @@ float rain_factor()
 	return			(g_pGamePersistent->Environment().CurrentEnv.rain_density);
 }
 
+
+float fog_exp()
+{
+	return			(g_pGamePersistent->Environment().CurrentEnv.fog_exp);
+}
+
 u32	vertex_in_direction(u32 level_vertex_id, Fvector direction, float max_distance)
 {
 	direction.normalize_safe();
@@ -562,6 +568,7 @@ void CLevel::script_register(lua_State *L)
 
 		def("cover_in_direction",				cover_in_direction),
 		def("vertex_in_direction",				vertex_in_direction),
+		def("fog_exp",							fog_exp),
 		def("rain_factor",						rain_factor),
 		def("patrol_path_exists",				patrol_path_exists),
 		def("vertex_position",					vertex_position),

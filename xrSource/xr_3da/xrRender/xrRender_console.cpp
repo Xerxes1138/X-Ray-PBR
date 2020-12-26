@@ -125,6 +125,14 @@ float		ps_r2_ssr_atten_border		= 0.0625f;
 float		ps_r2_ssr_temporal_response	= 0.8f;
 //
 
+// SSGI
+float			ps_r2_ssgi_ray_length = 0.3f;
+float			ps_r2_ssgi_ray_thickness = 0.005f;
+float			ps_r2_ssgi_atten_border = 0.125f;
+float			ps_r2_ssgi_temporal_response = 0.8f;
+//
+
+
 // TAA
 float		ps_r2_taa_min_response		= 0.90f;
 float		ps_r2_taa_max_response		= 0.99f;
@@ -134,6 +142,9 @@ float		ps_r2_taa_max_response		= 0.99f;
 float		ps_r2_contact_shadows_sun_length = 0.01f;
 float		ps_r2_contact_shadows_length = 0.01f;
 //
+
+float		ps_r2_hao_depth_near_scale	= 1.0f;
+float		ps_r2_hao_depth_near_bias	= -0.001f;
 
 //- Mad Max
 float		ps_r2_gloss_factor			= 1.0f;
@@ -429,6 +440,13 @@ void		xrRender_initconsole	()
 	CMD4(CCC_Float,	"r2_ssr_temporal_response", &ps_r2_ssr_temporal_response, 0.0f,	0.99999f);
 	//
 
+	// SSGI
+	CMD4(CCC_Float,	"r2_ssgi_ray_length", &ps_r2_ssgi_ray_length, 1e-5f, 1.0f);
+	CMD4(CCC_Float,	"r2_ssgi_ray_thickness", &ps_r2_ssgi_ray_thickness, 1e-5f, 1.0f);
+	CMD4(CCC_Float,	"r2_ssgi_atten_border", &ps_r2_ssgi_atten_border, 1e-5f, 1.0f);
+	CMD4(CCC_Float,	"r2_ssgi_temporal_response", &ps_r2_ssgi_temporal_response, 0.0f,	0.99999f);
+	//
+
 	// TAA
 	CMD4(CCC_Float,	"r2_taa_min_response", &ps_r2_taa_min_response, 0.0f, 0.99999f);
 	CMD4(CCC_Float,	"r2_taa_max_response", &ps_r2_taa_max_response, 0.0f, 0.99999f);
@@ -436,6 +454,9 @@ void		xrRender_initconsole	()
 	// Contact Shadows
 	CMD4(CCC_Float,	"r2_contact_shadows_sun_length", &ps_r2_contact_shadows_sun_length, 1e-5f, 1.0f);
 	CMD4(CCC_Float,	"r2_contact_shadows_length", &ps_r2_contact_shadows_length, 1e-5f, 1.0f);
+
+	CMD4(CCC_Float,		"r2_hao_depth_near_scale",&ps_r2_hao_depth_near_scale, 0.5f, 1.5f		);
+	CMD4(CCC_Float,		"r2_hao_depth_near_bias",&ps_r2_hao_depth_near_bias, -1.0f,	1.0f	);
 }
 
 void	xrRender_apply_tf		()

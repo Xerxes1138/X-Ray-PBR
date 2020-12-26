@@ -317,6 +317,7 @@ void CEnvironment::OnFrame()
 	EM.far_plane			= 0;
 	EM.fog_color.set		( 0,0,0 );
 	EM.fog_density			= 0;
+	//EM.fog_exp				= 0;
 	EM.ambient.set			( 0,0,0 );
 	EM.sky_color.set		( 0,0,0 );
 	EM.hemi_color.set		( 0,0,0 );

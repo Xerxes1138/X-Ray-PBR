@@ -92,7 +92,7 @@ void	CBlender_Particle::Compile	(CBlender_Compile& C)
 		C.r_Sampler_rtf		("s_position",				r2_RT_P);
 		C.r_Sampler_rtf		("s_normal",				r2_RT_N);
 		C.r_Sampler_rtf		("s_diffuse",				r2_RT_albedo);
-		C.r_Sampler_rtf		("s_depth",					r2_RT_depth);
+		C.r_Sampler_rtf		("s_specular",					r2_RT_specular);
 
 		C.r_Sampler			("s_diffuse_s0",			r2_T_envs0, D3DTADDRESS_CLAMP,	D3DTEXF_LINEAR,		D3DTEXF_LINEAR,	D3DTEXF_LINEAR, true		);
 		C.r_Sampler			("s_diffuse_s1",			r2_T_envs1, D3DTADDRESS_CLAMP,	D3DTEXF_LINEAR,		D3DTEXF_LINEAR,	D3DTEXF_LINEAR, true		);
@@ -114,7 +114,7 @@ void	CBlender_Particle::Compile	(CBlender_Compile& C)
 		C.r_Sampler_rtf		("s_position",				r2_RT_P);
 		C.r_Sampler_rtf		("s_normal",				r2_RT_N);
 		C.r_Sampler_rtf		("s_diffuse",				r2_RT_albedo);
-		C.r_Sampler_rtf		("s_depth",					r2_RT_depth);
+		C.r_Sampler_rtf		("s_specular",					r2_RT_specular);
 		C.r_End				();
 		break;
 	case 4: 	// deffer-EMAP

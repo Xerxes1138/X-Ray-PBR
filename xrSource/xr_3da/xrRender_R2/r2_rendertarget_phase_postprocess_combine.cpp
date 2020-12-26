@@ -78,8 +78,6 @@ void	CRenderTarget::phase_postprocess_combine	()
 		skyColor.y *= ps_r2_sun_lumscale_hemi; 
 		skyColor.z *= ps_r2_sun_lumscale_hemi;
 
-		Fvector4 skyParams = {environment.sky_rotation, 0, 0, 0};
-
 		// TODO : Move this to standard binding
 		RCache.set_c("dx_matrix_Projection", ProjectioMatrix);
 		RCache.set_c("dx_matrix_CameraToWorld", CameraToWorldMatrix);
@@ -87,7 +85,6 @@ void	CRenderTarget::phase_postprocess_combine	()
 		RCache.set_c("dx_matrix_ViewProjection", ViewProjectionMatrix);
 		RCache.set_c("dx_matrix_InverseViewProjection",	InverseViewProjectionMatrix);
 
-		RCache.set_c("dx_SkyRotation", skyParams);
 		RCache.set_c("dx_AmbientColor", ambientColor);
 		RCache.set_c("dx_SkyColor", skyColor);
 		RCache.set_c				("L_ambient",		ambientColor	);
@@ -136,28 +133,54 @@ void	CRenderTarget::phase_postprocess_combine	()
 		RCache.Render				(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
 	}
 
-
-		RCache.set_Stencil(FALSE);
-
-	u_setrt	(rt_Generic_1, 0, 0, 0, HW.pBaseZB);
-	RCache.set_CullMode				(CULL_CCW);
-	RCache.set_Stencil(FALSE);
-	RCache.set_ColorWriteEnable		();
-	RImplementation.render_forward	();
-	RCache.set_Stencil	(FALSE);
-
-	// Distortion filter
-	BOOL	bDistort	= RImplementation.o.distortion_enabled;				// This can be modified
+	if(0)
 	{
-		if		((0==RImplementation.mapDistort.size()) && !_menu_pp)		bDistort= FALSE;
-		if (bDistort)		{
-			u_setrt						(rt_distortion,0,0,0,HW.pBaseZB);		// Now RT is a distortion mask
-			RCache.set_CullMode			(CULL_CCW);
-			RCache.set_Stencil			(FALSE);
-			RCache.set_ColorWriteEnable	();
-			CHK_DX(HW.pDevice->Clear	( 0L, NULL, D3DCLEAR_TARGET, color_rgba(127,127,0,127), 1.0f, 0L));
-			RImplementation.r_dsgraph_render_distort	();
-			//if (g_pGamePersistent)	g_pGamePersistent->OnRenderPPUI_PP()	;	// PP-UI
-		}
+		u32			Offset					= 0;
+		Fvector2	p0,p1;
+
+		u_setrt	(rt_Generic_0, 0, 0, 0, HW.pBaseZB);
+		RCache.set_CullMode			(CULL_CCW);
+		RCache.set_Stencil			(FALSE);
+		RCache.set_ColorWriteEnable	();
+
+		CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, FALSE));
+
+		struct v_blit	
+		{
+			Fvector4	p;
+			Fvector2	uv0;
+		};
+
+		float	_w					= float(Device.dwWidth);
+		float	_h					= float(Device.dwHeight);
+
+		p0.set(.5f/_w, .5f/_h);
+		p1.set((_w+.5f)/_w, (_h+.5f)/_h );
+
+		// Fill vertex buffer
+		v_blit* pv = (v_blit*) RCache.Vertex.Lock(4, g_blit->vb_stride, Offset);
+		pv->p.set(EPS, float(_h+EPS), EPS, 1.f);
+		pv->uv0.set(p0.x, p1.y);
+		pv++;
+
+		pv->p.set(EPS, EPS,	EPS, 1.f);
+		pv->uv0.set(p0.x, p0.y);
+		pv++;
+
+		pv->p.set(float(_w+EPS), float(_h+EPS), EPS, 1.f); 
+		pv->uv0.set(p1.x, p1.y);
+		pv++;
+
+		pv->p.set(float(_w+EPS), EPS, EPS, 1.f); 
+		pv->uv0.set(p1.x, p0.y); 
+		pv++;
+
+		RCache.Vertex.Unlock(4, g_blit->vb_stride);
+
+		RCache.set_Shader(s_blit);
+		RCache.set_Geometry	(g_blit);
+		RCache.Render(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
+
+		CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, TRUE));
 	}
 }

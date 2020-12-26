@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #pragma once
 
 #include "Rain.h"
@@ -19,7 +19,7 @@ static const float	source_radius		= 12.5f;
 static const float	source_offset		= 40.f;
 static const float	max_distance		= source_offset*1.25f;
 static const float	sink_offset			= -(max_distance-source_offset);
-static const float	drop_length			= 5.f;
+static const float	drop_length			= 1.f;
 static const float	drop_width			= 0.30f;
 static const float	drop_angle			= 3.0f;
 static const float	drop_max_angle		= deg2rad(10.f);
@@ -30,7 +30,9 @@ static const float	drop_speed_max		= 80.f;
 const int	max_particles		= 1000;
 const int	particles_cache		= 400;
 const float particles_time		= .3f;
- 
+
+
+
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
@@ -45,8 +47,15 @@ CEffect_Rain::CEffect_Rain()
 	VERIFY3							(F,"Can't open file.","dm\\rain.dm");
 	DM_Drop							= ::Render->model_CreateDM		(F);
 
-	//
-	SH_Rain.create					("effects\\rain","fx\\fx_rain");
+
+	 LPCSTR rain_textures[2] = 
+	 {
+		 "fx\\fx_rain", 
+		 "fx\\fx_rainsplash1"
+	 }; 
+
+	SH_Rain.create					("effects\\rain", rain_textures[0]);
+	SH_Drop.create					("effects\\rain_drop", rain_textures[1]);
 	hGeom_Rain.create				(FVF::F_LIT, RCache.Vertex.Buffer(), RCache.QuadIB);
 	hGeom_Drops.create				(D3DFVF_XYZ | D3DFVF_DIFFUSE | D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.Index.Buffer());
 	p_create						();
@@ -199,7 +208,7 @@ void	CEffect_Rain::Render	()
 		if (one.dwTime_Hit<Device.dwTimeGlobal)		Hit (one.Phit);
 		if (one.dwTime_Life<Device.dwTimeGlobal)	Born(one,source_radius);
 
-// ïîñëåäíÿÿ äåëüòà ??
+// Ã¯Ã®Ã±Ã«Ã¥Ã¤Ã­Ã¿Ã¿ Ã¤Ã¥Ã«Ã¼Ã²Ã  ??
 //.		float xdt		= float(one.dwTime_Hit-Device.dwTimeGlobal)/1000.f;
 //.		float dt		= Device.fTimeDelta;//xdt<Device.fTimeDelta?xdt:Device.fTimeDelta;
 		float dt		= Device.fTimeDelta;
@@ -278,7 +287,8 @@ void	CEffect_Rain::Render	()
 	RCache.Vertex.Unlock		(vCount,hGeom_Rain->vb_stride);
 	
 	// Render if needed
-	if (vCount)	{
+	if (vCount)	
+	{
 		HW.pDevice->SetRenderState	(D3DRS_CULLMODE,D3DCULL_NONE);
 		RCache.set_xform_world		(Fidentity);
 		RCache.set_Shader			(SH_Rain);
@@ -294,8 +304,9 @@ void	CEffect_Rain::Render	()
 	{
 		float	dt				= Device.fTimeDelta;
 		_IndexStream& _IS		= RCache.Index;
-		RCache.set_Shader		(DM_Drop->shader);
-		
+		//RCache.set_Shader		(DM_Drop->shader);
+		RCache.set_Shader			(SH_Drop);
+
 		Fmatrix					mXform,mScale;
 		int						pcount  = 0;
 		u32						v_offset,i_offset;

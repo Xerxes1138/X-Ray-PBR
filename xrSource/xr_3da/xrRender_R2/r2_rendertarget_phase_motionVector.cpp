@@ -33,7 +33,7 @@ void CRenderTarget::phase_motionVector ()
 		Fvector2	p0,p1;
 
 		u_setrt	(rt_motionVector, NULL, NULL, NULL, /*NULL*/ HW.pBaseZB );
-
+		RCache.set_ColorWriteEnable	();
 		//RCache.set_CullMode			(CULL_CCW);
 
 		//CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, FALSE));
@@ -102,7 +102,7 @@ void CRenderTarget::phase_motionVector ()
 
 		RCache.set_Geometry			(g_motionVector);
 		RCache.Render				(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
-
+		RCache.set_ColorWriteEnable	(FALSE);
 		//CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, TRUE));
 	}
 }

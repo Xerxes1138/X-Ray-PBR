@@ -7,14 +7,227 @@ void CRenderTarget::phase_postprocess_reflection()
 {
 	CEnvDescriptorMixer& environment = g_pGamePersistent->Environment().CurrentEnv;
 
-	// SSR + IBL Spec + FOG
+	if(1)
 	{
 		u32			Offset					= 0;
 		Fvector2	p0,p1;
 
-		u_setrt	(rt_Generic_1, NULL, NULL, NULL,  HW.pBaseZB);
+		struct v_postprocess_ssgi_resolve
+		{
+			Fvector4	position;
+			Fvector2	uv0;
+		};
+
+		float	_w					= float(Device.dwWidth);
+		float	_h					= float(Device.dwHeight);
+
+		float du = 0.5f / _w;
+		float dv = 0.5f / _h;
+
+		p0.set(du, dv);
+		p1.set((_w + 0.5f) / _w, (_h + 0.5f) / _h);
+
+		// Fill vertex buffer
+		v_postprocess_ssgi_resolve* pv = (v_postprocess_ssgi_resolve*) RCache.Vertex.Lock(4, g_postprocess_ssgi_resolve->vb_stride, Offset);
+		pv->position.set(EPS, float(_h + EPS), EPS, 1.f);
+		pv->uv0.set(p0.x, p1.y);
+		pv++;
+
+		pv->position.set(EPS, EPS,	EPS, 1.f);
+		pv->uv0.set(p0.x, p0.y);
+		pv++;
+
+		pv->position.set(float(_w + EPS), float(_h + EPS), EPS, 1.f); 
+		pv->uv0.set(p1.x, p1.y);
+		pv++;
+
+		pv->position.set(float(_w + EPS), EPS, EPS, 1.f); 
+		pv->uv0.set(p1.x, p0.y); 
+		pv++;
+		
+		RCache.Vertex.Unlock(4, g_postprocess_ssgi_resolve->vb_stride);
+
+		RCache.set_Shader	(s_postprocess_ssgi_resolve);
+
+		Fmatrix	ViewMatrix; ViewMatrix.set(Device.mView);
+		Fmatrix	ProjectioMatrix; ProjectioMatrix.set(Device.mProject);
+		Fmatrix	InverseProjectioMatrix; InverseProjectioMatrix.invert(Device.mProject);
+
+		Fmatrix	ViewProjectionMatrix;
+		ViewProjectionMatrix.mul(ViewMatrix, ProjectioMatrix);
+
+		Fmatrix	InverseViewProjectionMatrix;
+		InverseViewProjectionMatrix.invert(ViewProjectionMatrix);
+
+		Fmatrix	CameraToWorldMatrix; CameraToWorldMatrix.invert(Device.mView);
+
+		RCache.set_c("dx_matrix_Projection", ProjectioMatrix);
+		RCache.set_c("dx_matrix_CameraToWorld", CameraToWorldMatrix);
+		RCache.set_c("dx_matrix_InverseProjection", InverseProjectioMatrix);
+		RCache.set_c("dx_matrix_ViewProjection", ViewProjectionMatrix);
+		RCache.set_c("dx_matrix_InverseViewProjection",	InverseViewProjectionMatrix);
+
+		Fvector4 SSGIParams = {ps_r2_ssgi_ray_length, ps_r2_ssgi_ray_thickness, ps_r2_ssgi_atten_border, ps_r2_ssgi_temporal_response};
+		RCache.set_c("dx_SSGI_Params", SSGIParams);
+
+		u_setrt	(rt_SSGI_Resolve, NULL, NULL, NULL, HW.pBaseZB);
+		RCache.set_ColorWriteEnable	();
 		RCache.set_CullMode( CULL_NONE );
 		RCache.set_Stencil(FALSE);
+
+		RCache.set_Geometry			(g_postprocess_ssgi_resolve);
+		RCache.Render				(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
+	}
+
+	if(1)
+	{
+		Fmatrix	m_previous, m_current;
+		static Fmatrix		m_saved_viewproj;
+		
+		// (new-camera) -> (world) -> (old_viewproj)
+		Fmatrix	m_invview;
+		m_invview.invert(Device.mView);
+
+		m_previous.mul(m_saved_viewproj, m_invview);
+
+		m_current.set(Device.mProjectUnJittered);
+
+		m_saved_viewproj.mul(Device.mProjectUnJittered, Device.mView);
+
+		u32			Offset					= 0;
+		Fvector2	p0,p1;
+
+		u_setrt	(rt_SSGI, 0, 0, 0, HW.pBaseZB);
+		RCache.set_CullMode(CULL_NONE);
+		RCache.set_Stencil(FALSE);
+
+		struct v_postprocess_ssgi_temporal
+		{
+			Fvector4	position;
+			Fvector2	uv0;
+		};
+
+		float	_w					= float(Device.dwWidth);
+		float	_h					= float(Device.dwHeight);
+
+		float du = 0.5f / _w;
+		float dv = 0.5f / _h;
+
+		p0.set(du, dv);
+		p1.set((_w + 0.5f) / _w, (_h + 0.5f) / _h);
+
+		// Fill vertex buffer
+		v_postprocess_ssgi_temporal* pv = (v_postprocess_ssgi_temporal*) 
+		
+		RCache.Vertex.Lock(4, g_postprocess_ssgi_temporal->vb_stride, Offset);
+
+		pv->position.set(EPS, float(_h + EPS), EPS, 1.f);
+		pv->uv0.set(p0.x, p1.y);
+		pv++;
+
+		pv->position.set(EPS, EPS,	EPS, 1.f);
+		pv->uv0.set(p0.x, p0.y);
+		pv++;
+
+		pv->position.set(float(_w + EPS), float(_h + EPS), EPS, 1.f); 
+		pv->uv0.set(p1.x, p1.y);
+		pv++;
+
+		pv->position.set(float(_w + EPS), EPS, EPS, 1.f); 
+		pv->uv0.set(p1.x, p0.y); 
+		pv++;
+
+		RCache.Vertex.Unlock(4, g_postprocess_ssgi_temporal->vb_stride);
+
+		RCache.set_Shader	(s_postprocess_ssgi_temporal);
+		Fmatrix	ViewMatrix; ViewMatrix.set(Device.mView);
+		Fmatrix	ProjectioMatrix; ProjectioMatrix.set(Device.mProjectUnJittered);
+		Fmatrix	InverseProjectioMatrix; InverseProjectioMatrix.invert(Device.mProjectUnJittered);
+
+		Fmatrix	ViewProjectionMatrix;
+		ViewProjectionMatrix.mul(ViewMatrix, ProjectioMatrix);
+
+		Fmatrix	InverseViewProjectionMatrix;
+		InverseViewProjectionMatrix.invert(ViewProjectionMatrix);
+
+		Fmatrix	CameraToWorldMatrix; CameraToWorldMatrix.invert(Device.mView);
+
+		// TODO : Move this to standard binding
+		RCache.set_c("dx_matrix_Projection", ProjectioMatrix);
+		RCache.set_c("dx_matrix_PreviousProjection", m_previous);
+		RCache.set_c("dx_matrix_CameraToWorld", CameraToWorldMatrix);
+		RCache.set_c("dx_matrix_InverseProjection", InverseProjectioMatrix);
+		RCache.set_c("dx_matrix_ViewProjection", ViewProjectionMatrix);
+		RCache.set_c("dx_matrix_InverseViewProjection",	InverseViewProjectionMatrix);
+
+		Fvector4 taaJitter;
+		taaJitter.x = Device.vTAAJitter.x;
+		taaJitter.y = Device.vTAAJitter.y;
+		taaJitter.z = 0;
+		taaJitter.w = 0;
+
+		RCache.set_c				("dx_TAA_Jitter", taaJitter);
+
+		Fvector4 SSGIParams = {ps_r2_ssgi_ray_length, ps_r2_ssgi_ray_thickness, ps_r2_ssgi_atten_border, ps_r2_ssgi_temporal_response};
+		RCache.set_c("dx_SSGI_Params", SSGIParams);
+
+		RCache.set_Geometry			(g_postprocess_ssgi_temporal);
+		RCache.Render				(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
+	}
+
+	if(1)
+	{
+		u32			Offset					= 0;
+		Fvector2	p0,p1;
+
+		u_setrt	(rt_SSGI_Previous, 0,0,0, HW.pBaseZB );
+		RCache.set_CullMode(CULL_NONE);
+		RCache.set_Stencil(FALSE);
+
+		struct v_blit_ssgi	
+		{
+			Fvector4	p;
+			Fvector2	uv0;
+		};
+
+		float	_w					= float(Device.dwWidth);
+		float	_h					= float(Device.dwHeight);
+
+		p0.set(.5f/_w, .5f/_h);
+		p1.set((_w+.5f)/_w, (_h+.5f)/_h );
+
+		// Fill vertex buffer
+		v_blit_ssgi* pv = (v_blit_ssgi*)
+			
+		RCache.Vertex.Lock(4, g_blit_ssgi->vb_stride, Offset);
+
+		pv->p.set(EPS, float(_h+EPS), EPS, 1.f);
+		pv->uv0.set(p0.x, p1.y);
+		pv++;
+
+		pv->p.set(EPS, EPS,	EPS, 1.f);
+		pv->uv0.set(p0.x, p0.y);
+		pv++;
+
+		pv->p.set(float(_w+EPS), float(_h+EPS), EPS, 1.f); 
+		pv->uv0.set(p1.x, p1.y);
+		pv++;
+
+		pv->p.set(float(_w+EPS), EPS, EPS, 1.f); 
+		pv->uv0.set(p1.x, p0.y); 
+		pv++;
+
+		RCache.Vertex.Unlock(4, g_blit_ssgi->vb_stride);
+
+		RCache.set_Shader(s_blit_ssgi);
+		RCache.set_Geometry	(g_blit_ssgi);
+		RCache.Render(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
+	}
+
+	if(1)
+	{
+		u32			Offset					= 0;
+		Fvector2	p0,p1;
 
 		struct v_postprocess_reflection
 		{
@@ -75,15 +288,12 @@ void CRenderTarget::phase_postprocess_reflection()
 		skyColor.y *= ps_r2_sun_lumscale_hemi; 
 		skyColor.z *= ps_r2_sun_lumscale_hemi;
 
-		Fvector4 skyParams = {environment.sky_rotation, 0, 0, 0};
-
 		RCache.set_c("dx_matrix_Projection", ProjectioMatrix);
 		RCache.set_c("dx_matrix_CameraToWorld", CameraToWorldMatrix);
 		RCache.set_c("dx_matrix_InverseProjection", InverseProjectioMatrix);
 		RCache.set_c("dx_matrix_ViewProjection", ViewProjectionMatrix);
 		RCache.set_c("dx_matrix_InverseViewProjection",	InverseViewProjectionMatrix);
 
-		RCache.set_c("dx_SkyRotation", skyParams);
 		RCache.set_c("dx_AmbientColor", ambientColor);
 		RCache.set_c("dx_SkyColor", skyColor);
 
@@ -123,6 +333,11 @@ void CRenderTarget::phase_postprocess_reflection()
 
 		Fvector4 SSRParams = {ps_r2_ssr_temporal_response, ps_r2_ssr_atten_border, 0, 0};
 		RCache.set_c("dx_SSR_Params", SSRParams);
+
+		u_setrt	(rt_Generic_1, NULL, NULL, NULL, HW.pBaseZB);
+		RCache.set_ColorWriteEnable	();
+		RCache.set_CullMode( CULL_NONE );
+		RCache.set_Stencil(FALSE);
 
 		RCache.set_Geometry			(g_postprocess_reflection);
 		RCache.Render				(D3DPT_TRIANGLELIST,Offset,0,4,0,2);

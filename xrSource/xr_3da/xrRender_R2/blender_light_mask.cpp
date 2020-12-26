@@ -15,13 +15,13 @@ void	CBlender_accum_direct_mask::Compile(CBlender_Compile& C)
 	case SE_MASK_SPOT:		// spot or omni-part
 		C.r_Pass			("accum_mask",		"dumb",				false,	TRUE,FALSE);
 		C.r_Sampler_rtf		("s_position",		r2_RT_P);
-		C.r_Sampler_rtf		("s_depth",			r2_RT_depth);
+	C.r_Sampler_rtf		("s_specular",					r2_RT_specular);
 		C.r_End				();
 		break;
 	case SE_MASK_POINT:		// point
 		C.r_Pass			("accum_mask",		"dumb",				false,	TRUE,FALSE);
 		C.r_Sampler_rtf		("s_position",		r2_RT_P);
-		C.r_Sampler_rtf		("s_depth",			r2_RT_depth);
+	C.r_Sampler_rtf		("s_specular",					r2_RT_specular);
 		C.r_End				();
 		break;
 	case SE_MASK_DIRECT:	// stencil mask for directional light

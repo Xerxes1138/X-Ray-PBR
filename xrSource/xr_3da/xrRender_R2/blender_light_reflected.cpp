@@ -15,7 +15,7 @@ void	CBlender_accum_reflected::Compile(CBlender_Compile& C)
 	C.r_Pass			("accum_volume",	"accum_indirect",false,	FALSE,FALSE,blend,D3DBLEND_ONE,dest);
 	C.r_Sampler_rtf		("s_position",		r2_RT_P);
 	C.r_Sampler_rtf		("s_normal",		r2_RT_N);
-	C.r_Sampler_rtf		("s_depth",			r2_RT_depth);
+	C.r_Sampler_rtf		("s_specular",					r2_RT_specular);
 	C.r_Sampler_clw		("s_material",		r2_material);
 	C.r_Sampler_rtf		("s_accumulator",	r2_RT_accum		);
 	C.r_End				();

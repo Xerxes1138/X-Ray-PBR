@@ -71,9 +71,6 @@ void CRenderTarget::accum_ambient ()
 		skyColor.y *= ps_r2_sun_lumscale_hemi; 
 		skyColor.z *= ps_r2_sun_lumscale_hemi;
 
-		Fvector4 skyParams = {environment.sky_rotation, 0, 0,0};
-
-		RCache.set_c("dx_SkyRotation", skyParams);
 		RCache.set_c("dx_AmbientColor", ambientColor);
 		RCache.set_c("dx_SkyColor", skyColor);
 
@@ -127,78 +124,6 @@ void CRenderTarget::accum_ambient ()
 		RCache.set_c				("Ldynamic_dir",	sundir	);
 
 		RCache.set_Geometry	(g_accum_ambient);
-		RCache.Render(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
-	}
-
-	if(0)
-	{	
-		bool	_menu_pp	= g_pGamePersistent?g_pGamePersistent->OnRenderPPUI_query():false;
-
-		u32			Offset					= 0;
-		Fvector2	p0, p1;
-
-		u_setrt						(rt_Accumulator_SSGI, NULL, NULL, NULL, HW.pBaseZB);
-		RCache.set_CullMode	(CULL_NONE	);
-		//RCache.set_ColorWriteEnable	();
-		RCache.set_Stencil(FALSE);
-
-		struct v_accum_ssgi	
-		{
-			Fvector4	position;
-			Fvector2	uv0;
-		};
-
-		float	_w					= float(Device.dwWidth);
-		float	_h					= float(Device.dwHeight);
-
-		p0.set(.5f/_w, .5f/_h);
-		p1.set((_w+.5f)/_w, (_h+.5f)/_h );
-
-		// Fill vertex buffer
-		v_accum_ssgi* pv = (v_accum_ssgi*) RCache.Vertex.Lock(4, g_accum_ssgi->vb_stride, Offset);
-		pv->position.set(EPS, float(_h+EPS), EPS, 1.f);
-		pv->uv0.set(p0.x, p1.y);
-		pv++;
-
-		pv->position.set(EPS, EPS,	EPS, 1.f);
-		pv->uv0.set(p0.x, p0.y);
-		pv++;
-
-		pv->position.set(float(_w+EPS), float(_h+EPS), EPS, 1.f); 
-		pv->uv0.set(p1.x, p1.y);
-		pv++;
-
-		pv->position.set(float(_w+EPS), EPS, EPS, 1.f); 
-		pv->uv0.set(p1.x, p0.y); 
-		pv++;
-
-		RCache.Vertex.Unlock(4, g_accum_ssgi->vb_stride);
-
-		// Shader
-		RCache.set_Shader(s_accum_ssgi);
-
-		CEnvDescriptorMixer& environment = g_pGamePersistent->Environment().CurrentEnv;
-
-		Fmatrix	ViewMatrix; ViewMatrix.set(Device.mView);
-		Fmatrix	ProjectioMatrix; ProjectioMatrix.set(Device.mProject);
-		Fmatrix	InverseProjectioMatrix; InverseProjectioMatrix.invert(Device.mProject);
-
-		Fmatrix	ViewProjectionMatrix;
-		ViewProjectionMatrix.mul(ViewMatrix, ProjectioMatrix);
-
-		Fmatrix	InverseViewProjectionMatrix;
-		InverseViewProjectionMatrix.invert(ViewProjectionMatrix);
-
-		Fmatrix	CameraToWorldMatrix; CameraToWorldMatrix.invert(Device.mView);
-
-		// TODO : Move this to standard binding
-		RCache.set_c("dx_matrix_Projection", ProjectioMatrix);
-		RCache.set_c("dx_matrix_CameraToWorld", CameraToWorldMatrix);
-		RCache.set_c("dx_matrix_InverseProjection", InverseProjectioMatrix);
-		RCache.set_c("dx_matrix_ViewProjection", ViewProjectionMatrix);
-		RCache.set_c("dx_matrix_InverseViewProjection",	InverseViewProjectionMatrix);
-
-		RCache.set_Geometry	(g_accum_ssgi);
 		RCache.Render(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
 	}
 }

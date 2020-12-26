@@ -111,10 +111,16 @@ extern ECORE_API Flags32		ps_r2_ssr_flags;
 extern ECORE_API float			ps_r2_ssr_atten_border;
 extern ECORE_API float			ps_r2_ssr_temporal_response;
 
+extern ECORE_API float			ps_r2_ssgi_ray_length; // 0.3f
+extern ECORE_API float			ps_r2_ssgi_ray_thickness; // 0.005f
+extern ECORE_API float			ps_r2_ssgi_atten_border; // 0.125f
+extern ECORE_API float			ps_r2_ssgi_temporal_response; // 0.8f
+
 extern ECORE_API float			ps_r2_taa_min_response;
 extern ECORE_API float			ps_r2_taa_max_response;
 
-
+extern ECORE_API float			ps_r2_hao_depth_near_scale; // 1.0f
+extern ECORE_API float			ps_r2_hao_depth_near_bias;	// -0.001f;
 
 extern ECORE_API float			ps_r2_contact_shadows_sun_length;
 extern ECORE_API float			ps_r2_contact_shadows_length;

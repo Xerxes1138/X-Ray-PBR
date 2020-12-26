@@ -49,6 +49,7 @@ private:
 
 	// Visualization	(drops)
 	IRender_DetailModel*			DM_Drop;
+	ref_shader						SH_Drop;
 	ref_geom						hGeom_Drops;
 	
 	// Data and logic
