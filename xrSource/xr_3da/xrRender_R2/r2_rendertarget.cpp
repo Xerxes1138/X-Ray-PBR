@@ -250,9 +250,12 @@ CRenderTarget::CRenderTarget		()
 	b_blit_ssgi						= xr_new<CBlender_blit_ssgi>					();
 	b_blit_ssgi_recursive			= xr_new<CBlender_blit_ssgi_recursive>			();
 	b_postprocess_ssr				= xr_new<CBlender_postprocess_ssr>				();
+	b_postprocess_ssr_resolve			= xr_new<CBlender_postprocess_ssr_resolve>	();
 	b_postprocess_ssr_temporal		= xr_new<CBlender_postprocess_ssr_temporal>		();
 	b_blit_ssr						= xr_new<CBlender_blit_ssr>						();
+
 	b_postprocess_reflection		= xr_new<CBlender_postprocess_reflection>();
+
 	b_postprocess_combine		= xr_new<CBlender_postprocess_combine>();
 	b_postprocess_fog_scattering		= xr_new<CBlender_postprocess_fog_scattering>();
 	b_postprocess_bloom_prepass		= xr_new<CBlender_postprocess_bloom_prepass>();
@@ -294,6 +297,7 @@ CRenderTarget::CRenderTarget		()
 		}
 
 		// SSGI
+		if(1)
 		{
 			rt_SSGI_Combine.create(r2_RT_SSGI_Combine, w, h, D3DFMT_A16B16G16R16F);
 
@@ -390,6 +394,31 @@ CRenderTarget::CRenderTarget		()
 
 		rt_Generic_0.create			(r2_RT_generic0,w,h,D3DFMT_A16B16G16R16F		);
 		rt_Generic_1.create			(r2_RT_generic1,w,h,D3DFMT_A16B16G16R16F		);
+
+	// SSR
+		{
+			s_postprocess_ssr.create(b_postprocess_ssr);
+			g_postprocess_ssr.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
+			rt_ssr_resolve.create(r2_RT_SSR_Resolve,w,h, D3DFMT_A16B16G16R16F);
+
+			s_postprocess_ssr_resolve.create(b_postprocess_ssr_resolve);
+			g_postprocess_ssr_resolve.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
+			{
+				rt_ssr_reflection_previous.create(r2_RT_SSR_Temporal,w,h, D3DFMT_A16B16G16R16F);
+
+				s_postprocess_ssr_temporal.create(b_postprocess_ssr_temporal);
+				g_postprocess_ssr_temporal.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+
+				s_blit_ssr.create(b_blit_ssr);
+				g_blit_ssr.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
+			}
+
+			/*rt_ssr_reflection.create(r2_RT_SSR_Reflection,w,h, D3DFMT_A16B16G16R16F);
+			s_postprocess_reflection.create(b_postprocess_reflection);
+			g_postprocess_reflection.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);*/
+		}
 	}
 
 	// OCCLUSION
@@ -447,32 +476,6 @@ CRenderTarget::CRenderTarget		()
 		g_accum_ambient.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
 	}
 
-	// SSR
-	{
-		s_postprocess_ssr.create(b_postprocess_ssr);
-		g_postprocess_ssr.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
-	}
-
-	// REFLECTION
-	{
-		s_postprocess_reflection.create(b_postprocess_reflection);
-		g_postprocess_reflection.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
-	}
-
-	// SSR TEMPORAL
-	{
-		u32	w = Device.dwWidth, h = Device.dwHeight;
-
-		rt_ssr_reflection.create(r2_RT_SSR_Reflection,w,h, D3DFMT_A16B16G16R16F);
-		rt_ssr_reflection_previous.create(r2_RT_SSR_Reflection_Previous,w,h, D3DFMT_A16B16G16R16F);
-
-		s_postprocess_ssr_temporal.create(b_postprocess_ssr_temporal);
-		g_postprocess_ssr_temporal.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
-
-		s_blit_ssr.create(b_blit_ssr);
-		g_blit_ssr.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
-	}
-
 	{
 		s_postprocess_combine.create(b_postprocess_combine);
 		g_postprocess_combine.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
@@ -509,6 +512,7 @@ CRenderTarget::CRenderTarget		()
 	}
 
 	// TAA
+	if (RImplementation.o.temporalAA)
 	{
 		s_blit_taa.create(b_blit_taa);
 		g_blit_taa.create(D3DFVF_XYZRHW|D3DFVF_TEX1, RCache.Vertex.Buffer(), RCache.QuadIB);
@@ -754,6 +758,7 @@ CRenderTarget::~CRenderTarget	()
 	xr_delete					(b_postprocess_AO_resolve);
 	xr_delete					(b_postprocess_AO_temporal);
 	xr_delete					(b_postprocess_ssr);
+	xr_delete					(b_postprocess_ssr_resolve);
 	xr_delete					(b_postprocess_ssgi);
 	xr_delete					(b_postprocess_ssgi_resolve);
 	xr_delete					(b_postprocess_ssgi_temporal);

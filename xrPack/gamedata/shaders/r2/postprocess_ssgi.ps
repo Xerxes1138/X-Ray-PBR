@@ -1,0 +1,154 @@
+#include "common.h"
+#include "hmodel.h"
+
+uniform float4 dx_ScreenSize;
+
+inline bool is_saturated(float value)   { return value == saturate(value); }
+inline bool is_saturated(float2 value)  { return is_saturated(value.x) && is_saturated(value.y); }
+inline bool is_saturated(float3 value)  { return is_saturated(value.x) && is_saturated(value.y) && is_saturated(value.z); }
+inline bool is_saturated(float4 value)  { return is_saturated(value.x) && is_saturated(value.y) && is_saturated(value.z) && is_saturated(value.w); }
+
+struct 	v2p
+{
+	float4 tc0: 		TEXCOORD0;
+};
+
+void main 
+( 
+		v2p I,
+		out float4 outSSGIRaycast : COLOR
+)
+{
+	// COORD
+	float2 uv = I.tc0;
+	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	//
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked =  1.0f /*data.occlusion*/;
+				
+	float materialID = data.materialID;
+	
+	float depth = 1 - data.depth;
+	
+	float linearDepth = gBuffer0.z;
+		
+	float3 positionView = data.position;//float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	//
+	float3 positionWorld = mul(dx_matrix_CameraToWorld, float4(positionView, 1.0f));
+	float3 normalWorld = normalize(mul((float3x3)dx_matrix_CameraToWorld, normalView));
+	
+	//float roughness = pow(1.0f - smoothness * 0.7f, 6.0f);
+	float roughness = max(1.0f - smoothness, 0.01f);
+	
+	float3 cameraPositionWorld = eye_position;
+		
+	float3 viewDirectionWorld = normalize(positionWorld - cameraPositionWorld);
+	//
+
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (dx_ScreenSize.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+		
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+	
+  	#ifdef STALKER_USE_SSGI
+		float2 Xi = blueNoise.xy;
+
+		float3 L = normalView;
+
+		float4 samplePoint = float4(hemisphereSample_cos(Xi.x, Xi.y), 1.0f);
+
+		float4 H = TangentToWorld(L, samplePoint);
+			
+		float hitPDF = H.w;
+		
+		float rayLength = STALKER_STOCHASTIC_SSGI_LENGTH;
+		
+		const uint NUM_RAY_MARCH_SAMPLES = 20;
+		
+		const float SIZE_RAY_MARCH_STEPS = (rayLength / ((float)NUM_RAY_MARCH_SAMPLES));
+		
+		float reflectionRayMarchStep = SIZE_RAY_MARCH_STEPS;
+		reflectionRayMarchStep = reflectionRayMarchStep * blueNoise.x + reflectionRayMarchStep;
+			
+		float2 rayUV = 0.0f;
+		float3 rayPosition = positionView;	
+		float3 rayDirection = H;
+		
+		uint hitFail = 0; 
+		
+		[unroll (NUM_RAY_MARCH_SAMPLES)]
+		for (uint rayStepIdx = 0; rayStepIdx < NUM_RAY_MARCH_SAMPLES; rayStepIdx++)
+		{
+			rayPosition += rayDirection * reflectionRayMarchStep;
+			
+			float4 screenSpaceReflectionPoint = mul(dx_matrix_Projection, float4(rayPosition, 1.0f));
+			screenSpaceReflectionPoint /= screenSpaceReflectionPoint.w;
+			screenSpaceReflectionPoint.xy = screenSpaceReflectionPoint.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
+			
+			rayUV = screenSpaceReflectionPoint.xy;
+			
+			if (is_saturated(rayUV))
+			{
+				float ZBufferVal = tex2Dlod(s_position, float4(rayUV.xy,0,0)).z;
+					if(ZBufferVal <= 0 ) ZBufferVal = dx_Viewport_Params.y;
+					
+				float delta = rayPosition.z - ZBufferVal;
+
+				float thickness = STALKER_STOCHASTIC_SSGI_THICKNESS;
+
+				if (abs(thickness - delta) < thickness)
+				{
+					hitFail = 1;
+					break;
+				}
+				reflectionRayMarchStep *= 1.0f + SIZE_RAY_MARCH_STEPS; // Increase step size after each iteration
+			}
+		}
+
+		outSSGIRaycast.xy = rayUV;
+		outSSGIRaycast.z = 1.0f / hitPDF;
+		outSSGIRaycast.w = /*1.0f - */(float)hitFail;
+	#else
+		outSSGIRaycast.xy = 0.5f;
+		outSSGIRaycast.z = 0.0f;
+		outSSGIRaycast.w = 1.0f;
+    #endif
+}

@@ -2,7 +2,7 @@
 #include "hmodel.h"
 
 #define STALKER_WATER_EDGE 0.03125f
-#define STALKER_WATER_MEDIUM_COLOR accurateSRGBToLinear(float3(0.8396226, 0.6315807, 0.368325))
+#define STALKER_WATER_MEDIUM_COLOR accurateSRGBToLinear(float3(0.33333f, 0.22745f, 0.06666f))
 #define STALKER_WATER_FOG_COLOR STALKER_WATER_MEDIUM_COLOR
 
 float RayAttenBorder (float2 pos, float value)
@@ -84,7 +84,11 @@ void main
 		float4 positionView = tex2D(s_position, screenUV);
 		
 		float d = saturate(abs(positionView.z - I.screenPos.z));
-				
+
+		float2 normalOffset0 = ( I.positionWorld.xz / 6) + timers.x * float2(0.2, 0.0);
+		float2 normalOffset1 = ( I.positionWorld.xz / 6) + timers.x * float2(-0.2, 0.0) + float2(0.25, -0.25);
+		
+		
 		// Surface
         float4 diffuseColor = SampleBaseColorAndAlpha(s_base, I.tbase);
 			
@@ -93,19 +97,17 @@ void main
 		float3 normalTangent = UnpackNormal(tex2D(s_nmap, I.tbase));
 		normalTangent = lerp(float3(0,0,1), normalTangent, 0.25f);
 		
-		float2 normalOffset0 = ( I.positionWorld.xz / 6) + timers.x * float2(0.2, 0.0);
-		float2 normalOffset1 = ( I.positionWorld.xz / 6) + timers.x * float2(-0.2, 0.0) + float2(0.25, -0.25);
+
 		
         float3 n0 = UnpackNormal(tex2D(s_wnmap, normalOffset0)) * 0.5f;
         float3 n1 = UnpackNormal(tex2D(s_wnmap, normalOffset1)) * 0.5f;
 		
         float3 waterSurfaceNormal = lerp(float3(0,0,1), float3(n0.xy + n1.xy, 0.0f), 0.03f); //TODO : Using flow map with wind direction instead of two panning normals
 		
-		float3 normalView = normalize(mul(float3x3(I.M1, I.M2, I.M3), normalTangent /*+ waterSurfaceNormal*/));	
-		
+
 		float hemisphereLighting = I.c0.a;
 		
-		normalTangent = lerp(waterSurfaceNormal, normalTangent, foam);
+		normalTangent = waterSurfaceNormal;//lerp(waterSurfaceNormal, normalTangent, foam);
 		// 
 
 		float4 sceneColor = tex2D(s_sceneColor, screenUV + normalTangent * 0.5f);
@@ -115,16 +117,8 @@ void main
 		float3 V = normalize(I.positionWorld - eye_position);
 		
 		float3 diffuseIBL, specularIBL;
-		ComputeImageBasedLighting(diffuseIBL, specularIBL, normalWorld, V, L_ambient, 0);
+		ComputeImageBasedLighting(diffuseIBL, specularIBL, normalWorld, V, L_ambient, 0, 1.0f, 1.0f);
 		
-		float3 fogIBL;
-		V = RotateAroundYAxis(V, dx_SkyRotation.x);
-
-		float3 fogCube0 = SampleIBL(env_s0, V);
-		float3 fogCube1 = SampleIBL(env_s1, V);
-
-		fogIBL = L_ambient.rgb * lerp(fogCube0, fogCube1, L_ambient.a);
-
         float NdotV = saturate(dot(normalWorld, -V));
         float F = F_Schlick(0.02f, NdotV);                
 
@@ -143,27 +137,28 @@ void main
 		float reflectionMask = saturate(dot(V, reflect(V, normalWorld)));
 
 		float3 reflectionColor = tex2D(s_sceneColor, reflectionCoord);
-		reflectionColor = lerp(specularIBL, reflectionColor, RayAttenBorder(reflectionCoord, 0.25f) * reflectionMask);
+		reflectionColor = lerp(specularIBL, reflectionColor, RayAttenBorder(reflectionCoord, 0.125f) * reflectionMask);
 		//
 		
 		// REFRACTION
 		float2 refractionCoord = RefractionCoord(V, normalWorld);
 		//
+
+		//float3 final = lerp(mediumWater + (waterFog * STALKER_WATER_FOG_COLOR) * diffuseIBL, diffuseColor.rgb * diffuseIBL, foam) + reflectionColor * F;
 		
-		// FOAM
-	
-		
-		float3 final = lerp
-		(
-			lerp(mediumWater + (waterFog * STALKER_WATER_FOG_COLOR) * diffuseIBL, diffuseColor.rgb * diffuseIBL, foam)
-			, 
-			reflectionColor, 
-			F
-		);
+		float3 final = mediumWater + waterFog * STALKER_WATER_FOG_COLOR * diffuseIBL + reflectionColor * F;
  
 		float softEdge = saturate((positionView.z - I.screenPos.z) / STALKER_WATER_EDGE);
 		
 		// FOG
+		float3 fogIBL;
+		V = RotateAroundYAxis(V, dx_SkyRotation.x);
+
+		float3 fogCube0 = SampleIBL(s_diffuse_s0, V);
+		float3 fogCube1 = SampleIBL(s_diffuse_s1, V);
+
+		fogIBL = L_ambient.rgb * lerp(fogCube0, fogCube1, L_ambient.a);
+		
 		float fog = I.fog;
 
 		final = lerp(final, fogIBL, fog);

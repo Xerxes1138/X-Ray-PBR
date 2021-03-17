@@ -91,7 +91,7 @@ void CRenderTarget::phase_ssr_raycast ()
 		RCache.set_ColorWriteEnable	(FALSE);
 	}
 
-	if(1)
+	if(0)
 	{
 		CEnvDescriptorMixer& environment = g_pGamePersistent->Environment().CurrentEnv;
 

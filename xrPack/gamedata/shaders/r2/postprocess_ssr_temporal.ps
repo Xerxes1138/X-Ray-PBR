@@ -2,7 +2,6 @@
 #include "hmodel.h"
 
 uniform sampler2D s_SSR_Raycast;
-uniform sampler2D s_motionVector;
 
 uniform sampler2D s_currentColor;
 uniform sampler2D s_previousColor;
@@ -63,7 +62,7 @@ void main
 		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
 	float4 gBuffer1 = tex2D(s_normal, uv);
 	float4 gBuffer2 = tex2D(s_diffuse, uv);
-	float4 gBuffer3 = tex2D(s_depth, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
 	//
 	
 	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
@@ -75,7 +74,7 @@ void main
 	
 	float depth = data.depth;
 	
-	float linearDepth = LinearDepth(depth);
+	float linearDepth = gBuffer0.z;
 		
 	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
 
@@ -96,7 +95,7 @@ void main
 	
 	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
 	
-	#ifdef STALKER_USE_STOCHASTIC_SSR
+	#if defined(STALKER_USE_STOCHASTIC_SSR) && defined(STALKER_USE_TAA)
 		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
 		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
 		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);

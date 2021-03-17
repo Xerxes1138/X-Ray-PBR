@@ -32,7 +32,8 @@ public:
 	};
 
 public:
-	struct		_options	{
+	struct		_options	
+	{
 		u32		bug					: 1;
 
 		u32		smapsize			: 16;
@@ -66,6 +67,8 @@ public:
 
 		u32		forcegloss			: 1;
 		u32		forceskinw			: 1;
+		u32		temporalAA			: 1;
+
 		float	forcegloss_v		;
 	}			o;
 	struct		_stats		{

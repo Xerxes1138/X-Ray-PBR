@@ -13,13 +13,30 @@
 sampler2D s_rain_ripple;
 sampler2D s_rain_puddle;
 
+			float3 BlendSoftLight(float3 cBase, float3 cBlend)
+			{
+				float3 isLessOrEq = step(cBlend, 0.5);
+				float3 cNew = lerp(1 - (1 - cBase) * (1 - 2 * cBlend * cBase), cBase * (1 - (1 - cBase) * (1 - 2 * cBlend)), isLessOrEq);
+				return cNew;
+			}
+
+			float3 BlendScreen(float3 c1, float3 c2)
+			{
+				return c1 + c2 * (1.0 - c1);													                            // 2 alu
+			}
+
+			float3 BlendOverlay(float3 c1, float3 c2)
+			{
+				return (c1 < 0.5f) ? 2.0 * c1 * c2 : -1.0 + 2.0 * BlendScreen(c1, c2);	  // 5 alu
+			}
+			
 void main 
 ( 
 	VertexOutput_GBUFFER Input,
-    out half4 outGBuffer0 : COLOR0,
-    out half4 outGBuffer1 : COLOR1,
-	out half4 outGBuffer2 : COLOR2,
-	out half4 outGBuffer3 : COLOR3
+    out float4 outGBuffer0 : COLOR0,
+    out float4 outGBuffer1 : COLOR1,
+	out float4 outGBuffer2 : COLOR2,
+	out float4 outGBuffer3 : COLOR3
 )
 {
 	float3 positionView = Input.vs_positionView.xyz;
@@ -37,48 +54,54 @@ void main
 	#ifdef USE_TDETAIL
 		#ifdef USE_4_DETAIL
 		half4 mask = tex2D(s_mask, Input.vs_textureCoord);
-		//mask.a = mask.a * mask.a;
-				
-		half4 albedoR = tex2D(s_dt_r, Input.tcdbump);
-		half4 albedoG = tex2D(s_dt_g, Input.tcdbump);
-		half4 albedoB = tex2D(s_dt_b, Input.tcdbump);
-		half4 albedoA = tex2D(s_dt_a, Input.tcdbump);
 		
-		float radius = 0.3f;
+		half mag = dot(mask, 1.0f);
 		
-		float heightR = (albedoR.a + mask.r);
-		float heightG = (albedoG.a + mask.g);
-		float heightB = (albedoB.a + mask.b);
-		float heightA = (albedoA.a + mask.a);
+		mask = mask / mag;
+					
+		half4 albedoR = tex2D(s_dt_r, Input.tcdbump) * mask.r;
+		half4 albedoG = tex2D(s_dt_g, Input.tcdbump) * mask.g;
+		half4 albedoB = tex2D(s_dt_b, Input.tcdbump) * mask.b;
+		half4 albedoA = tex2D(s_dt_a, Input.tcdbump) * mask.a;
 		
-		float sum = max(heightR, max(heightG, max(heightB, heightA)));
+		//float4 radius = 1.0f;
 		
-		float4 height = max(1e-5f, float4(heightR, heightG, heightB, heightA) - sum + radius);
-		height /= saturate(dot(height, 1.0f));
+		//float heightR = (albedoR.a + mask.r);
+		//float heightG = (albedoG.a + mask.g);
+		//float heightB = (albedoB.a + mask.b);
+		//float heightA = (albedoA.a + mask.a);
 		
-		albedo = 2.0f * albedo * (height.r * albedoR + height.g * albedoG + height.b * albedoB + height.a * albedoA) * saturate(dot(mask, 1.0));
+		//float sum = max(heightR, max(heightG, max(heightB, heightA)));
 
+		//float4 height = max(1e-5f, float4(heightR - sum + radius.r, heightG - sum + radius.g, heightB - sum + radius.b, heightA - sum + radius.a));
+		
+		float3 albedoTiled = albedoR.rgb + albedoG.rgb + albedoB.rgb + albedoA.rgb;//(height.r * albedoR + height.g * albedoG + height.b * albedoB + height.a * albedoA) / (height.r + height.g + height.b + height.a);
+		
+		albedo = BlendOverlay(albedo, albedoTiled);
+		
+		float heightSum =  albedoR.a + albedoG.a + albedoB.a + albedoA.a;//(height.r * albedoR.a + height.g * albedoG.a + height.b * albedoB.a + height.a * albedoA.a) / (height.r + height.g + height.b + height.a);
+		
 		#ifdef USE_4_BUMP
-			half3 normalR = UnpackNormal(tex2D(s_dn_r, Input.tcdbump));
-			half3 normalG = UnpackNormal(tex2D(s_dn_g, Input.tcdbump));
-			half3 normalB = UnpackNormal(tex2D(s_dn_b, Input.tcdbump));
-			half3 normalA = UnpackNormal(tex2D(s_dn_a, Input.tcdbump));
+			half3 normalR = UnpackNormal(tex2D(s_dn_r, Input.tcdbump)) * mask.r;
+			half3 normalG = UnpackNormal(tex2D(s_dn_g, Input.tcdbump)) * mask.g;
+			half3 normalB = UnpackNormal(tex2D(s_dn_b, Input.tcdbump)) * mask.b;
+			half3 normalA = UnpackNormal(tex2D(s_dn_a, Input.tcdbump)) * mask.a;
 			
-			half smoothnessR = tex2D(s_dn_r, Input.tcdbump).r;
-			half smoothnessG = tex2D(s_dn_g, Input.tcdbump).r;
-			half smoothnessB = tex2D(s_dn_b, Input.tcdbump).r;
-			half smoothnessA = tex2D(s_dn_a, Input.tcdbump).r;
+			half smoothnessR = tex2D(s_dn_r, Input.tcdbump).r * mask.r;
+			half smoothnessG = tex2D(s_dn_g, Input.tcdbump).r * mask.g;
+			half smoothnessB = tex2D(s_dn_b, Input.tcdbump).r * mask.b;
+			half smoothnessA = tex2D(s_dn_a, Input.tcdbump).r * mask.a;
 			
-			half microOclusionR = tex2D(s_dn_r, Input.tcdbump).g;
-			half microOclusionG = tex2D(s_dn_g, Input.tcdbump).g;
-			half microOclusionB = tex2D(s_dn_b, Input.tcdbump).g;
-			half microOclusionA = tex2D(s_dn_a, Input.tcdbump).g;
+			half microOclusionR = tex2D(s_dn_r, Input.tcdbump).g * mask.r;
+			half microOclusionG = tex2D(s_dn_g, Input.tcdbump).g * mask.g;
+			half microOclusionB = tex2D(s_dn_b, Input.tcdbump).g * mask.b;
+			half microOclusionA = tex2D(s_dn_a, Input.tcdbump).g * mask.a;
 
-			half3 normal = (height.r * normalR + height.g * normalG + height.b * normalB + height.a * normalA) * saturate(dot(mask, 1.0));
+			half3 normal = normalR + normalG + normalB + normalA;//(height.r * normalR + height.g * normalG + height.b * normalB + height.a * normalA) / (height.r + height.g + height.b + height.a);
 			 
-			smoothness = (height.r * smoothnessR + height.g * smoothnessG + height.b * smoothnessB + height.a * smoothnessA) * saturate(dot(mask, 1.0));
+			smoothness = smoothnessR + smoothnessG + smoothnessB + smoothnessA;//(height.r * smoothnessR + height.g * smoothnessG + height.b * smoothnessB + height.a * smoothnessA) / (height.r + height.g + height.b + height.a);
 			
-			microOclusion = (height.r * microOclusionR + height.g * microOclusionG + height.b * microOclusionB + height.a * microOclusionA) * saturate(dot(mask, 1.0));
+			microOclusion = microOclusionR + microOclusionG + microOclusionB + microOclusionA;//(height.r * microOclusionR + height.g * microOclusionG + height.b * microOclusionB + height.a * microOclusionA) / (height.r + height.g + height.b + height.a);
 							
 			half3 normalView = normalize(mul(half3x3(Input.vs_tangentView, Input.vs_binormalView, Input.vs_normalView), normal));
 		#else
@@ -86,7 +109,8 @@ void main
 		#endif
 		
 		#else
-			albedo	= 2.0 * albedo * tex2D(s_detail, Input.tcdbump).rgb;
+			float3 detail = tex2D(s_detail, Input.tcdbump).rgb; 
+			albedo = BlendOverlay(albedo, detail);
 		#endif
 	#else
 		half3 normalView = normalize(Input.N.xyz);
@@ -135,14 +159,11 @@ void main
 				#else
 					half3 normalWater = normalize(Input.N.xyz);
 				#endif
-				
-				float slope = pow(saturate(Input.vs_normalWorld.y), 16.0);
-					
 				half4 smoothnessWater = 0.98f;
 				half wetSource = 1.0f - tex2D(s_rain_puddle, Input.vs_positionWorldAndDepth.xy / 40);
 				half wet = dx_WeatherParams.x;
-				half flood =  dx_WeatherParams.x;
-				half puddle = dx_WeatherParams.x /* slope*/;
+				half flood = 0.0f;
+				half puddle = dx_WeatherParams.x;
 				
 				// Get depth/accumulation water information
 				float2 accumulatedWaters;
@@ -170,17 +191,37 @@ void main
 			#endif
 		#endif
 	#endif
+	
+	float2 velocity = float2(0.5f, 0.5f);
+		
+	#if 0
+		float4 currentClip	= mul(m_P, float4(positionView, 1.0f));
+		float2 current = (currentClip.xy / currentClip.w);
+		current = current * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+		
+		float3 previousPositionView = Input.vs_positionWorldAndDepth.xyz;
+ 
+		float4 previousClip	= mul(m_previous_P, float4(previousPositionView, 1.0f));
+		float2 previous =  (previousClip.xy / previousClip.w);
+		previous = previous * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
 
+		velocity = (current - previous);
+	#endif
+	
 	GBufferData data;
 	data.position = positionView /*=+ normalView * def_virtualh / 2.0f*/;
 	data.normal = normalView;
 	data.diffuseColor = albedo;
-	data.specularColor = (float3)0.04f;
 	
-    data.materialID = ms;
+	float3 f0 = accurateLinearToSRGB((float3)0.04f);
+	data.specularColor = f0;
+	
+	//data.velocity = velocity;
+		
+    data.materialID = EncodeShadingModel(SHADING_MODEL_STANDARD);
     data.smoothness = smoothness;
-    data.occlusion = ambientOcclusionBaked * microOclusion;
-    data.depth = Input.vs_positionWorldAndDepth.z / Input.vs_positionWorldAndDepth.w;
+    data.occlusion = heightSum /*ambientOcclusionBaked * microOclusion*/;
+    data.depth = 1.0f - (Input.vs_positionWorldAndDepth.z / Input.vs_positionWorldAndDepth.w);
 	
 	DataToGBuffer(data, outGBuffer0, outGBuffer1, outGBuffer2, outGBuffer3);
 }

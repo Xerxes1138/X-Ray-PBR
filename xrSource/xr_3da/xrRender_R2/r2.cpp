@@ -197,11 +197,12 @@ void					CRender::create					()
 	o.depth16			= (strstr(Core.Params,"-depth16"))?		TRUE	:FALSE	;
 	o.noshadows			= (strstr(Core.Params,"-noshadows"))?	TRUE	:FALSE	;
 	o.Tshadows			= (strstr(Core.Params,"-tsh"))?			TRUE	:FALSE	;
-	o.mblur				= (strstr(Core.Params,"-mblur"))?		TRUE	:FALSE	;
+	o.mblur				= (strstr(Core.Params,"-mblur"))?		TRUE	:FALSE	;	if (o.mblur)	Msg	("* Motion blur supported");	else	Msg	("* Motion blur not upported");
 	o.distortion_enabled= (strstr(Core.Params,"-nodistort"))?	FALSE	:TRUE	;
 	o.distortion		= o.distortion_enabled;
 	o.disasm			= (strstr(Core.Params,"-disasm"))?		TRUE	:FALSE	;
 	o.forceskinw		= (strstr(Core.Params,"-skinw"))?		TRUE	:FALSE	;
+	o.temporalAA		= (strstr(Core.Params,"-temporalaa"))?	TRUE	:FALSE	;	if (o.temporalAA)	Msg	("* TAA supported and used");	else	Msg	("* TAA not upported");
 
 	// constants
 	::Device.Resources->RegisterConstantSetup	("parallax",	&binder_parallax);
@@ -557,6 +558,12 @@ HRESULT	CRender::shader_compile			(
 		defines[def_it].Definition	=	"1";
 		def_it						++;
 	}
+	if (o.temporalAA)		
+	{
+		defines[def_it].Name		=	"STALKER_USE_TAA";
+		defines[def_it].Definition	=	"1";
+		def_it						++;
+	}
 
 	// skinning
 	if (m_skinning<0)		{
@@ -579,7 +586,7 @@ HRESULT	CRender::shader_compile			(
 		defines[def_it].Definition	=	"1";
 		def_it						++;
 	}
-
+	
 	// finish
 	defines[def_it].Name			=	0;
 	defines[def_it].Definition		=	0;

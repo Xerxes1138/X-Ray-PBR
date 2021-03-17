@@ -10,7 +10,14 @@ uniform samplerCUBE s_diffuse_s1;
 uniform samplerCUBE s_specular_s0;
 uniform samplerCUBE s_specular_s1;
 
-uniform sampler2D s_AO;
+uniform	sampler2D 	s_SSGI_Raycast;
+uniform	sampler2D 	s_SSGI_Resolve;
+
+uniform sampler2D 	s_AO;
+uniform sampler2D 	s_AO_Resolve;
+uniform sampler2D 	s_AO_Temporal;
+
+uniform sampler2D 	s_motionVector;
 
 // CONSTANTS
 #define GOLDEN_RATIO 1.6180339887498948482f
@@ -29,6 +36,7 @@ uniform float4 dx_Viewport_Params;
 
 uniform float4 dx_SSAO_Params;
 uniform float4 dx_SSRS_Params;
+uniform float4 dx_SSGI_Params;
 uniform float4 dx_SSR_Params;
 uniform float4 dx_TAA_Params;
 uniform float4 dx_Tonemap_Params;
@@ -50,4 +58,10 @@ uniform float4x4 dx_matrix_ViewProjection;
 #define STALKER_SUN_WAVELENGTH float3(0.2737f, 0.3474f, 0.4211f)
 
 #define STALKER_IBL_NUM_MIP 8
+
+#define STALKER_SHADING_MODEL_NUM 4
+#define SHADING_MODEL_STANDARD 0
+#define SHADING_MODEL_CLOTH 1
+#define SHADING_MODEL_SSS 2
+#define SHADING_MODEL_FOLIAGE 3
 #endif

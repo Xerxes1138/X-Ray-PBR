@@ -1,6 +1,11 @@
 #ifndef STALKER_STRUCT_H
 #define STALKER_STRUCT_H
 
+struct VertexInput_Simple
+{
+	float4 position : POSITION;
+};
+
 struct VertexInput_Static
 {
 	float4 position : POSITION;
@@ -37,6 +42,11 @@ struct VertexInput_Detail
 	int4 misc : TEXCOORD0;
 };
 
+struct VertexOutput_SIMPLE
+{
+	float4 vs_vertex : POSITION;
+};
+
 struct VertexOutput_GBUFFER
 {
 	float4 vs_vertex : POSITION;
@@ -51,9 +61,9 @@ struct VertexOutput_GBUFFER
 
 	float4 vs_positionWorldAndDepth : TEXCOORD2;
 	
-	#ifdef STALKER_USE_LEGACY_RAIN
+	/*#ifdef STALKER_USE_LEGACY_RAIN
 		float3 vs_normalWorld : TEXCOORD3;
-	#endif
+	#endif*/
 	
 	#ifdef USE_AREF
 	    float4 vs_positionScreen : TEXCOORD3;
@@ -87,6 +97,33 @@ struct VertexOutput_GBUFFER
 		float2 lmh : TEXCOORD7;
 	#endif
 #endif
+};
+
+struct VertexOutput_FORWARD
+{
+	float4 vs_vertex : POSITION;
+
+#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	float4 vs_textureCoord : TEXCOORD0;
+#else
+	float2 vs_textureCoord : TEXCOORD0;
+#endif
+	float3 vs_positionWorld : TEXCOORD1;
+
+	float3 vs_normalWorld : TEXCOORD2;
+	
+	#ifdef USE_AREF
+	    float4 vs_positionScreen : TEXCOORD3;
+    #endif
+	
+	#ifdef USE_LM_HEMI
+		float2 lmh : TEXCOORD4;
+	#endif
+	
+	#ifdef USE_FORWARD_FOG
+	float3 vs_positionView : TEXCOORD5;
+		//float vs_vertexFog : TEXCOORD6;
+	#endif
 };
 
 struct AccumVertexOuput     

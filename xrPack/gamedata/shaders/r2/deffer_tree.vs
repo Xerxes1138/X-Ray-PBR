@@ -87,9 +87,9 @@ VertexOutput_GBUFFER main(VertexInput_Tree v)
          vertexOuput.vs_normalView = normalView;
     #endif
 
-	#ifdef STALKER_USE_LEGACY_RAIN
+	/*#ifdef STALKER_USE_LEGACY_RAIN
 		vertexOuput.vs_normalWorld = ObjectSpaceToWorldSpaceNormal(unpack_bx4(v.normal.xyz));
-	#endif
+	#endif*/
 	
     #ifdef 	USE_PARALLAX
 	    vertexOuput.eye 			= mul		(float3x3(T,B,N),-(positionWorld - eye_position));

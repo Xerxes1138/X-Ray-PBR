@@ -42,7 +42,7 @@ float4  main  (AccumVertexOuput I) : COLOR
 		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
 	float4 gBuffer1 = tex2D(s_normal, uv);
 	float4 gBuffer2 = tex2D(s_diffuse, uv);
-	float4 gBuffer3 = tex2D(s_depth, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
 	//
 	
 	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
@@ -50,11 +50,11 @@ float4  main  (AccumVertexOuput I) : COLOR
 	// DATA
 	float ambientOcclusionBaked = data.occlusion;
 				
-	float materialID = data.materialID;
+	float materialID = DecodeShadingModel(data.materialID);
 	
 	float depth = data.depth;
 	
-	float linearDepth = LinearDepth(depth);
+	float linearDepth = gBuffer0.z;
 		
 	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
 

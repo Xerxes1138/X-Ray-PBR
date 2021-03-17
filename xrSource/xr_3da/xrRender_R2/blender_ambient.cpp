@@ -19,9 +19,9 @@ void	CBlender_ambient::Compile(CBlender_Compile& C)
 
 	C.r_Sampler_rtf		("s_SSGI_Resolve",			r2_RT_SSGI_Previous);
 
-	C.r_Sampler_rtf		("s_reflectionColor",		r2_RT_SSR_Reflection_Previous);
+	C.r_Sampler_rtf		("s_reflectionColor",		r2_RT_SSR_Temporal);
 
-	C.r_Sampler_clf		("s_motionVector",			r2_RT_motionVector);
+	C.r_Sampler_rtf		("s_motionVector",			r2_RT_motionVector);
 	C.r_Sampler_rtf		("s_AO",					r2_RT_AO_Temporal);
 
 	C.r_Sampler			("s_diffuse_s0",			r2_T_envs0, D3DTADDRESS_CLAMP,	D3DTEXF_LINEAR,		D3DTEXF_LINEAR,	D3DTEXF_LINEAR, true		);

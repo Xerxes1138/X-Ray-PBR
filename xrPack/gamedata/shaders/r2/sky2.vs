@@ -24,6 +24,9 @@ vf main (vi v)
 {
         vf                 	o;
 		//o.hpos = mul(m_WVP, v.p);
+		
+		//v.pos.xyz = RotateAroundYAxis(v.pos.xyz, dx_SkyRotation.x);
+		
         o.hpos = mul(m_WVP, float4(v.p.xyz , 1.0f)).xyww;
 		o.pos = v.p;
 		o.normal = v.normal;

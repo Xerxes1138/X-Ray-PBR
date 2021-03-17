@@ -23,19 +23,19 @@ float4 	main		( CombineVertexInput I )	: COLOR0
 	
 	// G-BUFFER
 	float4 gBuffer0 = tex2D(s_position, uv);
-		//if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
-		//if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
 	float4 gBuffer1 = tex2D(s_normal, uv);
 	float4 gBuffer2 = tex2D(s_diffuse, uv);
-	float4 gBuffer3 = tex2D(s_depth, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
 	//
 	
 	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
 	
 	// DATA
-	float ambientOcclusionBaked =  1.0f /*data.occlusion*/;
+	float ambientOcclusionBaked = data.occlusion;
 				
-	float materialID = data.materialID;
+	float materialID = DecodeShadingModel(data.materialID);
 	
 	float depth = data.depth;
 	
@@ -51,46 +51,13 @@ float4 	main		( CombineVertexInput I )	: COLOR0
 	float smoothness = data.smoothness;
 	//
 
-	//
-	float3 positionWorld = mul(dx_matrix_CameraToWorld, float4(positionView, 1.0f));
-	float3 normalWorld = normalize(mul((float3x3)dx_matrix_CameraToWorld, normalView));
-	
-	//float roughness = pow(1.0f - smoothness * 0.7f, 6.0f);
-	float roughness = max(1.0f - smoothness, 0.01f);
-	
-	float3 cameraPositionWorld = eye_position;
-		
-	float3 viewDirectionWorld = normalize(positionWorld - cameraPositionWorld);
-	
-	float NdotV = saturate(dot(normalWorld, -viewDirectionWorld));
-	//
-
 	// DEFERRED LIGHTING PASS
     float4 lightingPassDiffuse = tex2D(s_accumulator, uv);
 	
     float4 lightingPassSpecular = tex2D(s_accumulatorSpecular, uv);
 	
-	#ifdef STALKER_CHECKERBOARD_RENDERING
-		float2 du = float2(1.0f / STALKER_SCREEN_SIZE.x, 0.0f);
-		float2 dv = float2(0.0f, 1.0f / STALKER_SCREEN_SIZE.y);
-	
-		float3 diffSpecLeft = tex2D(s_accumulator, uv - du);
-		float3 diffSpecRight = tex2D(s_accumulator, uv + du);
-		float3 diffSpecCenter = tex2D(s_accumulator, uv);
-		float3 diffSpecTop = tex2D(s_accumulator, uv - dv);
-		float3 diffSpecBottom = tex2D(s_accumulator, uv + dv);
-	
-		float ab = ColorDiffBlend (diffSpecLeft, diffSpecRight);
-		float cd = ColorDiffBlend (diffSpecTop, diffSpecBottom);
-		
-		float3 diffSpec = 0.5f * lerp(diffSpecLeft + diffSpecRight, diffSpecTop + diffSpecBottom, ab < cd);
-
-		float3 diffuseLighting = lerp(diffSpec.rgb, diffSpecCenter.rgb, checkerboard);
-		float3 specularLighting = lerp(diffSpecCenter.rgb, diffSpec.rgb, checkerboard);
-	#else
-		float3 diffuseLighting = lightingPassDiffuse.rgb;
-		float3 specularLighting = lightingPassSpecular.rgb;
-	#endif
+	float3 diffuseLighting = lightingPassDiffuse.rgb;
+	float3 specularLighting = lightingPassSpecular.rgb;
 	//
 
 	// RANDOM
@@ -112,45 +79,41 @@ float4 	main		( CombineVertexInput I )	: COLOR0
 		fmod(pos.x, 8.0f),
 		fmod(pos.y, 8.0f)
 	);
-	
-	//Hash(interleavedGradientNoise);
-	
+
 	float2 rotation; 
 	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
 	//
 
 	// SSS PASS - https://github.com/Xerxes1138/ScreenSpaceSubsurfaceScattering
-	#ifndef STALKER_CHECKERBOARD_RENDERING
-		#ifdef STALKER_USE_SSSSS
-			float sssMask = int(materialID * (float)4 + 0.5f) == 3 ? 1 : 0; //if(int(materialID * (float)4 + 0.5f) == 4)
-			float3 sssDiffuseDirect  = 0.0f;
-			float3 sssAttenuation = 0.0f;
-			float3 sssWeights = 0.0f;
-			for(int w = -STALKER_SSS_NUM_SAMPLES; w <= STALKER_SSS_NUM_SAMPLES; w++)
-			{
-				float dist = ((float)w / STALKER_SSS_NUM_SAMPLES);
+	#ifdef STALKER_USE_SSSSS
+		float sssMask = materialID == SHADING_MODEL_SSS ? 1 : 0;
+		float3 sssDiffuseDirect  = 0.0f;
+		float3 sssAttenuation = 0.0f;
+		float3 sssWeights = 0.0f;
+		for(int w = -STALKER_SSS_NUM_SAMPLES; w <= STALKER_SSS_NUM_SAMPLES; w++)
+		{
+			float dist = ((float)w / STALKER_SSS_NUM_SAMPLES);
 					
-				float2 offset = (float2)(dist * (STALKER_SSS_SIZE / linearDepth) * sssMask);
+			float2 offset = (float2)(dist * (STALKER_SSS_SIZE / linearDepth) * sssMask);
 					
-				offset *= rotation * sqrt(blueNoise.y);
+			offset *= rotation * sqrt(blueNoise.y);
 
-				float2 offsetUV = I.tc0 + offset;
+			float2 offsetUV = I.tc0 + offset;
 
-				sssAttenuation = SSSAtenuation(dist, albedo /*STALKER_SSS_WEIGHTS*/);
+			sssAttenuation = SSSAtenuation(dist, albedo /*STALKER_SSS_WEIGHTS*/);
 					
-				float sampledLinearDepth = tex2D(s_position, offsetUV).z;    
+			float sampledLinearDepth = tex2D(s_position, offsetUV).z;    
 					 
-				float delta = saturate(abs(sampledLinearDepth - linearDepth));
+			float delta = saturate(abs(sampledLinearDepth - linearDepth));
 
-				float3 sampledDiffuseLighting = tex2D(s_accumulator, offsetUV).rgb;
+			float3 sampledDiffuseLighting = tex2D(s_accumulator, offsetUV).rgb;
 
-				sssWeights += sssAttenuation;
-				sssDiffuseDirect += lerp(sampledDiffuseLighting, diffuseLighting, delta) * sssAttenuation;
-			}
-			sssDiffuseDirect /= sssWeights;
+			sssWeights += sssAttenuation;
+			sssDiffuseDirect += lerp(sampledDiffuseLighting, diffuseLighting, delta) * sssAttenuation;
+		}
+		sssDiffuseDirect /= sssWeights;
 			
-			diffuseLighting = sssDiffuseDirect; 
-		#endif
+		diffuseLighting = sssDiffuseDirect; 
 	#endif
 	//
 	
@@ -164,12 +127,10 @@ float4 	main		( CombineVertexInput I )	: COLOR0
 			if(abs(uv.x - STALKER_DEBUG_DIVIDER) < 0.001f)
 				color = float3(0,1,0);
 		#else
-			color = diffuseLighting /*+ specularLighting*/;
+			color = diffuseLighting + specularLighting;
 		#endif
 	#endif
 	//
-	
-	//color = albedo;
 
-	return float4(color /*+ blueNoise.w / 255.0f*/, 1.0f);
+	return float4(color, 1.0f);
 }

@@ -1,3 +1,5 @@
+// INFO : material ID is setup in TextureDescrManager.cpp
+
 #include "common.h"
 
 uniform float4 consts;

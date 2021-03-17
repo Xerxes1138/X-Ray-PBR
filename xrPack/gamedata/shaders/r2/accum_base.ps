@@ -4,11 +4,32 @@
 
 #include "stalker_Shadows.h"
 
+float3 FetchNormal( const float2 uv)
+{
+
+	const float3 c = tex2D(s_position, uv).xyz;
+	const float3 r = tex2D(s_position, uv + half2( +1.0 , 0.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 l = tex2D(s_position, uv + half2( -1.0 , 0.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 t = tex2D(s_position, uv + half2(  0.0, +1.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 b = tex2D(s_position, uv + half2(  0.0, -1.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 vr = ( r - c ), vl = ( c - l ), vt = ( t - c ), vb = ( c - b );
+	const float3 min_horiz = ( dot( vr, vr ) < dot( vl, vl ) ) ? vr : vl;
+	const float3 min_vert = ( dot( vt, vt ) < dot( vb, vb ) ) ? vt : vb;
+	const float3 normalScreenSpace = normalize( cross( min_horiz, min_vert ) );
+
+	return float3( normalScreenSpace.x, normalScreenSpace.y, normalScreenSpace.z );
+}
+
 float RayAttenBorder (float2 pos, float value)
 {
 	float borderDist = min(1.0 - max(pos.x, pos.y), min(pos.x, pos.y));
 	return saturate(borderDist > value ? 1.0 : borderDist / value);
 }
+
+inline bool is_saturated(float value)   { return value == saturate(value); }
+inline bool is_saturated(float2 value)  { return is_saturated(value.x) && is_saturated(value.y); }
+inline bool is_saturated(float3 value)  { return is_saturated(value.x) && is_saturated(value.y) && is_saturated(value.z); }
+inline bool is_saturated(float4 value)  { return is_saturated(value.x) && is_saturated(value.y) && is_saturated(value.z) && is_saturated(value.w); }
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // This is the basic primitive used by convex, volumetric lights
@@ -44,7 +65,7 @@ uniform float4 m_lmap[2];
 		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
 	float4 gBuffer1 = tex2D(s_normal, uv);
 	float4 gBuffer2 = tex2D(s_diffuse, uv);
-	float4 gBuffer3 = tex2D(s_depth, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
 	//
 	
 	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
@@ -56,13 +77,13 @@ uniform float4 m_lmap[2];
 	// DATA
 	float ambientOcclusionBaked = data.occlusion;
 				
-	float materialID = data.materialID;
+	float materialID = DecodeShadingModel(data.materialID);
 	
 	float depth = data.depth;
 	
-	float linearDepth = data.position.z /*LinearDepth(depth)*/;
-
-    float3 positionView = /*data.position*/ float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+	float linearDepth = gBuffer0.z;
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
 
 	float3 normalView = normalize(data.normal);
 	
@@ -101,7 +122,7 @@ uniform float4 m_lmap[2];
 	// BRDF
 	float rsqr;
 	float3	diffuseDirect, specularDirect;
-	plight_local(diffuseDirect, specularDirect, specularColor, smoothness, positionView, normalView, Ldynamic_pos.xyz, Ldynamic_pos.w, rsqr);
+	plight_local(diffuseDirect, specularDirect, specularColor, smoothness, positionView, normalView, Ldynamic_pos.xyz, Ldynamic_pos.w, rsqr, materialID);
 
 	// SHADOWS
 	float4 P4 = float4(positionView.xyz, 1.0f);
@@ -120,50 +141,54 @@ uniform float4 m_lmap[2];
 	
     // SSRS
     #if defined (USE_SHADOW) && defined (STALKER_USE_SSRS_POINT_SPOT)
-        float rayLength = STALKER_SSRS_POINT_SPOT_RAY_LENGTH;
-		float3 viewRay = normalize(positionView);
-
-		float4 screenSpacePos  = float4(uv, depth, 1.0f);
+		float rayLength = STALKER_SSRS_SUN_RAY_LENGTH;
 		
-		float2 Xi = blueNoise.xy;
-
-        float3 L2P = positionView - Ldynamic_pos.xyz;
-	    float3 L = normalize(L2P);
-
-		float3 screenSpaceReflectionVec = float3(L.xy - positionView.xy  / positionView.z * L.z, L.z / positionView.z) * dx_Projection_Params.xyz;
-			
-		const int NUM_RAY_MARCH_SAMPLES = 12;
+		const uint NUM_RAY_MARCH_SAMPLES = 16;
 		
-		const float SIZE_RAY_MARCH_STEPS = (rayLength / ((float)NUM_RAY_MARCH_SAMPLES)) / linearDepth;
+		const float SIZE_RAY_MARCH_STEPS = (rayLength / ((float)NUM_RAY_MARCH_SAMPLES));
 		
 		float reflectionRayMarchStep = SIZE_RAY_MARCH_STEPS;
-		reflectionRayMarchStep = reflectionRayMarchStep * (interleavedGradientNoise) + reflectionRayMarchStep;
-
-		float3 raySample = screenSpacePos;
-
-		int hitFail = 0;
+		reflectionRayMarchStep = reflectionRayMarchStep * blueNoise.x + reflectionRayMarchStep;
+		
+		float3 L2P = positionView - Ldynamic_pos.xyz;
+	    float3 L = normalize(L2P);
+		
+		float2 rayUV = 0.0f;
+		float3 rayPosition = positionView;	
+		float3 rayDirection = -L;
+		
+		uint hitFail = 0; 
+		
 		[unroll (NUM_RAY_MARCH_SAMPLES)]
-		for (int rayStepIdx = 0; rayStepIdx < NUM_RAY_MARCH_SAMPLES; rayStepIdx++)
+		for (uint rayStepIdx = 0; rayStepIdx < NUM_RAY_MARCH_SAMPLES; rayStepIdx++)
 		{
-			float ZBufferVal = tex2Dlod(s_position, float4(raySample.xy,0,0)).w;
-					if(ZBufferVal <= 0 ) ZBufferVal = 1.0f;
-					
-			float delta = raySample.z - ZBufferVal;
-
-			float thickness = 0.01f / linearDepth;
-	
-			if (0.0f < delta && delta < thickness)
+			rayPosition += rayDirection * reflectionRayMarchStep;
+			
+			float4 screenSpaceReflectionPoint = mul(dx_matrix_Projection, float4(rayPosition, 1.0f));
+			screenSpaceReflectionPoint /= screenSpaceReflectionPoint.w;
+			screenSpaceReflectionPoint.xy = screenSpaceReflectionPoint.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
+			
+			rayUV = screenSpaceReflectionPoint.xy;
+			
+			if (is_saturated(rayUV))
 			{
-				hitFail = 1;
-				break;
+				float ZBufferVal = tex2Dlod(s_position, float4(rayUV.xy,0,0)).z;
+					if(ZBufferVal <= 0 ) ZBufferVal = dx_Viewport_Params.y;
+					
+				float delta = rayPosition.z - ZBufferVal;
+
+				float thickness = 0.05f;
+
+				if (abs(thickness - delta) < thickness)
+				{
+					hitFail = 1;
+					break;
+				}
 			}
-
-			raySample += screenSpaceReflectionVec * reflectionRayMarchStep;
-
-            //reflectionRayMarchStep *= 1.0f + SIZE_RAY_MARCH_STEPS; // Increase step size after each iteration
+			//reflectionRayMarchStep *= 1.0f + SIZE_RAY_MARCH_STEPS; // Increase step size after each iteration
 		}
 
-		shadows *= lerp(1.0f, 1.0f - hitFail, RayAttenBorder(raySample.xy, 0.0625f));
+		shadows *= lerp(1.0f, 1.0f - (float)hitFail, RayAttenBorder(rayUV, 0.0125f));
     #endif
 
 	// LIGHTMAP

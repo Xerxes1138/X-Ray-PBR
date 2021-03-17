@@ -68,7 +68,8 @@ public:
 
 	ref_rt						rt_motionVector;
 
-	ref_rt						rt_ssr_reflection;
+	//ref_rt						rt_ssr_reflection;
+	ref_rt						rt_ssr_resolve;
 	ref_rt						rt_ssr_reflection_previous;
 
 	ref_rt						rt_distortion;
@@ -152,6 +153,10 @@ private:
 	IBlender*					b_postprocess_ssr;
 	ref_shader					s_postprocess_ssr;
 	ref_geom					g_postprocess_ssr;
+
+	IBlender*					b_postprocess_ssr_resolve;
+	ref_shader					s_postprocess_ssr_resolve;
+	ref_geom					g_postprocess_ssr_resolve;
 
 	IBlender*					b_postprocess_reflection;
 	ref_shader					s_postprocess_reflection;

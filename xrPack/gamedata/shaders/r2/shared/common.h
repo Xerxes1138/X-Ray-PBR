@@ -3,16 +3,19 @@
 //
 uniform float3x4	m_W;
 uniform float3x4	m_V;
-
 uniform float4x4 	m_P;
 
 uniform float3x4	m_WV;
-
 uniform float4x4 	m_VP;
 uniform float4x4 	m_WVP;
+
+uniform float3x4	m_previous_W;
+uniform float3x4	m_previous_V;
+uniform float4x4 	m_previous_P;
+
 uniform half4		timers;
 uniform half4		fog_plane;
-uniform float4		fog_params;		// x=near*(1/(far-near)), 1/(f-n), density, w = -1/(far-near)
+uniform float4		fog_params;		// x = near * (1/(far-near)), y = exp, z = density, w = -1/(far-near)
 uniform half4		fog_color;
 uniform half3		L_sun_color;
 uniform half3		L_sun_dir_w;

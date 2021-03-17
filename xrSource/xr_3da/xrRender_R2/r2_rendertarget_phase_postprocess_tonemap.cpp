@@ -8,11 +8,11 @@ void CRenderTarget::phase_postprocess_tonemap ()
 	bool	_menu_pp	= g_pGamePersistent?g_pGamePersistent->OnRenderPPUI_query():false;
 	
 
-	u_setrt	(rt_previousColor, 0, 0, 0, HW.pBaseZB);
+	/*u_setrt	(rt_previousColor, 0, 0, 0, HW.pBaseZB);
 	RCache.set_CullMode				(CULL_CCW);
 	RCache.set_Stencil(FALSE);
 	g_pGamePersistent->Environment().RenderLast(); // rain/thunder-bolts
-	RCache.set_Stencil	(FALSE);
+	RCache.set_Stencil	(FALSE);*/
 
 	//*** exposure-pipeline
 	u32			gpu_id	= Device.dwFrame%2;
@@ -89,7 +89,7 @@ void CRenderTarget::phase_postprocess_tonemap ()
 
 		RCache.set_ColorWriteEnable();
 
-		CHK_DX(HW.pDevice->SetRenderState	( D3DRS_SRGBWRITEENABLE,			0				));
+		//CHK_DX(HW.pDevice->SetRenderState	( D3DRS_SRGBWRITEENABLE,			0				));
 
 		struct v_postprocess_tonemap
 		{
@@ -140,6 +140,7 @@ void CRenderTarget::phase_postprocess_tonemap ()
 		RCache.Render(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
 	}
 
+	if(0)
 	{
 		// PP enabled ?
 		BOOL	PP_Complex		= u_need_PP	();

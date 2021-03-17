@@ -46,7 +46,7 @@ float D_GGX(float NdotH, float m)
 	m = m * m;
 	float m2 = m * m;
 	float f = (NdotH * m2 - NdotH) * NdotH + 1.0f;
-	return /*(1.0f / STALKER_PI) */ m2 / (f * f  + 1e-5f);
+	return (1.0f / STALKER_PI) * m2 / (f * f);
 }
 
 float DisneyDiffuse(float NdotV, float NdotL, float LdotH, float linearRoughness)
@@ -108,17 +108,25 @@ float3 BSDF(float3 N, float3 V, float3 L, float3 specularColor, float smoothness
 	return (isDiffuse ? Diffuse : Specular) * NdotL /* STALKER_PI*/;
 }
 
-void plight_infinity(out float3 diffuseLight, out float3 specularLight, float3 specularColor, float smoothness, float3 pos, float3 normal, float3 light_direction)
+void plight_infinity(out float3 diffuseLight, out float3 specularLight, float3 specularColor, float smoothness, float3 pos, float3 normal, float3 light_direction, float materialID)
 {
 	float3 N		= normalize(normal);
 	float3 V 	= normalize(pos);
 	float3 L 	= -light_direction;
 	
-	diffuseLight = BSDF(N, -V, L, specularColor, smoothness);
-	specularLight  = BSDF(N, -V, L, specularColor, smoothness, false);
+	if(materialID == SHADING_MODEL_FOLIAGE)
+	{
+		diffuseLight = BSDF(N, -V, L, specularColor, smoothness);
+		specularLight  = 0.0f;
+	}
+	else 
+	{
+		diffuseLight = BSDF(N, -V, L, specularColor, smoothness);
+		specularLight  = BSDF(N, -V, L, specularColor, smoothness, false);
+	}
 }
 
-void plight_local(out float3 diffuseLight, out float3 specularLight, float3 specularColor, float smoothness, float3 pos, float3 normal, float3 light_position, float light_range_rsq, out float rsqr)  
+void plight_local(out float3 diffuseLight, out float3 specularLight, float3 specularColor, float smoothness, float3 pos, float3 normal, float3 light_position, float light_range_rsq, out float rsqr, float materialID)  
 {
 	float3 N	= normalize(normal);	
 	float3 L2P = pos - light_position;
@@ -133,9 +141,17 @@ void plight_local(out float3 diffuseLight, out float3 specularLight, float3 spec
 	{
 		attenuation = Square(saturate( 1.0f - Square(rsqr * light_range_rsq)));
 	}
-
-	diffuseLight = BSDF(N, -V, L, specularColor, smoothness) * attenuation;
-	specularLight  = BSDF(N, -V, L, specularColor, smoothness, false) * attenuation;
+	
+	if(materialID == SHADING_MODEL_FOLIAGE)
+	{
+		diffuseLight = BSDF(N, -V, L, specularColor, smoothness) * attenuation;
+		specularLight  = 0.0f;
+	}
+	else 
+	{
+		diffuseLight = BSDF(N, -V, L, specularColor, smoothness) * attenuation;
+		specularLight  = BSDF(N, -V, L, specularColor, smoothness, false) * attenuation;
+	}
 }
 
 float4	blendp	(float4	value, float4 	tcp)    		{

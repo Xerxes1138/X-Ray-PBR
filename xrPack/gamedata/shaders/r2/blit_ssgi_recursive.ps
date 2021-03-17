@@ -1,0 +1,18 @@
+#include "common.h"
+
+uniform sampler2D s_currentColor;
+
+struct BlitVertexInput      
+{
+	float2 tc0	: TEXCOORD0;
+};
+
+half4 	main		( BlitVertexInput I )	: COLOR
+{
+	// COORD
+    float2 uv = I.tc0;
+	
+	float2 velocity = tex2D(s_motionVector, uv);
+	
+ 	return tex2D(s_currentColor, uv - velocity);
+}

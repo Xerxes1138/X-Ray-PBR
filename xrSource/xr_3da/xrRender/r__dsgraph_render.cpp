@@ -369,8 +369,11 @@ void R_dsgraph_structure::r_dsgraph_render_hud	()
 
 	Device.mProject.build_projection(deg2rad(psHUD_FOV*Device.fFOV /* *Device.fASPECT*/ ), Device.fASPECT, VIEWPORT_NEAR, g_pGamePersistent->Environment().CurrentEnv.far_plane);
 
-	Device.mProject._31 += (Device.vTAAJitter.x * 2 - 1) / Device.dwWidth;
-	Device.mProject._32 += (Device.vTAAJitter.y * 2 - 1) / Device.dwHeight;
+	if(strstr(Core.Params,"-temporalaa"))
+	{	
+		Device.mProject._31 += (Device.vTAAJitter.x * 2 - 1) / Device.dwWidth;
+		Device.mProject._32 += (Device.vTAAJitter.y * 2 - 1) / Device.dwHeight;
+	}
 
 	Device.mFullTransform.mul	(Device.mProject, Device.mView);
 	RCache.set_xform_project	(Device.mProject);

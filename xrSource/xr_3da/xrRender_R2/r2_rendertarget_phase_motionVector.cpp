@@ -7,23 +7,17 @@ void CRenderTarget::phase_motionVector ()
 {
 	// Previous matrix
 	Fmatrix		m_previous, m_current;
-	//Fvector2	m_blur_scale;
-	//{
-		static Fmatrix		m_saved_viewproj;
+
+	static Fmatrix		m_saved_viewproj;
 		
-		// (new-camera) -> (world) -> (old_viewproj)
-		Fmatrix	m_invview;
-		m_invview.invert(Device.mView);
+	Fmatrix	m_invview;
+	m_invview.invert(Device.mView);
 
-		m_previous.mul(m_saved_viewproj, m_invview);
+	m_previous.mul(m_saved_viewproj, m_invview);
 
-		m_current.set(Device.mProjectUnJittered);
+	m_current.set(Device.mProjectUnJittered);
 
-		m_saved_viewproj.mul(Device.mProjectUnJittered, Device.mView);
-
-		//float	scale		= ps_r2_mblur / 2.f;
-		//m_blur_scale.set	(scale, -scale).div(12.f);
-	//}
+	m_saved_viewproj.mul(Device.mProjectUnJittered, Device.mView);
 
 	if(1)
 	{
@@ -31,17 +25,6 @@ void CRenderTarget::phase_motionVector ()
 
 		u32			Offset = 0;
 		Fvector2	p0,p1;
-
-		u_setrt	(rt_motionVector, NULL, NULL, NULL, /*NULL*/ HW.pBaseZB );
-		RCache.set_ColorWriteEnable	();
-		//RCache.set_CullMode			(CULL_CCW);
-
-		//CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, FALSE));
-
-		RCache.set_CullMode( CULL_NONE );
-		RCache.set_Stencil(FALSE);
-
-		//CHK_DX(HW.pDevice->Clear	( 0L, NULL, D3DCLEAR_TARGET, color_rgba(127,127,0,127), 1.0f, 0L));
 
 		struct v_motionVector
 		{
@@ -100,9 +83,13 @@ void CRenderTarget::phase_motionVector ()
 		RCache.set_c("dx_matrix_ViewProjection", ViewProjectionMatrix);
 		RCache.set_c("dx_matrix_InverseViewProjection",	InverseViewProjectionMatrix);
 
+		u_setrt	(rt_motionVector, NULL, NULL, NULL, HW.pBaseZB);
+
+		RCache.set_CullMode( CULL_NONE );
+		RCache.set_Stencil(FALSE);
+		RCache.set_ColorWriteEnable	();
 		RCache.set_Geometry			(g_motionVector);
 		RCache.Render				(D3DPT_TRIANGLELIST,Offset,0,4,0,2);
 		RCache.set_ColorWriteEnable	(FALSE);
-		//CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, TRUE));
 	}
 }

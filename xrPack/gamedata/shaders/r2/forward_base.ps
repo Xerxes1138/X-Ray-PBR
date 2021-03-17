@@ -1,0 +1,87 @@
+#define USE_FORWARD_FOG
+
+#include 	"common.h"
+
+uniform sampler2D 		s_blueNoise;
+
+void main 
+( 
+	VertexOutput_FORWARD Input,
+    out float4 outGBuffer0 : COLOR0
+)
+{
+	// COORD
+	float2 uv = Input.vs_textureCoord;
+	
+	#ifdef USE_AREF
+		float2 uvScreen = Input.vs_positionScreen.xy / Input.vs_positionScreen.w;
+		int2 pos = uvScreen * STALKER_SCREEN_SIZE.xy;
+	#endif
+	
+	// RANDOM
+	#ifdef USE_AREF
+		float dither =	 Dither8x8Bayer
+		(
+			fmod(pos.x, 8.0f),
+			fmod(pos.y, 8.0f)
+		);
+		
+		float4 blueNoise = tex2D(s_blueNoise, uvScreen * STALKER_SCREEN_SIZE.xy / 1024);
+	
+		#ifdef STALKER_USE_TAA
+			blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+			blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+			blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+			blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		#endif
+		
+		float interleavedGradientNoise = InterleavedGradientNoise(pos);
+	
+		#ifdef STALKER_USE_TAA
+			interleavedGradientNoise = fmod(interleavedGradientNoise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		#endif
+	#endif
+	//
+	
+	// VECTORS
+	float3 normalWorld = normalize(Input.vs_normalWorld);
+	float3 lightDirectionWorld = -L_sun_dir_w;
+	float3 viewDirectionWorld = normalize(Input.vs_positionWorld - eye_position);
+	//
+
+	float4 albedo = tex2D(s_base, uv);
+	
+	float3 diffuseColor = albedo.rgb;
+	
+	float alpha = albedo.a;
+	
+	#ifdef USE_AREF
+		clip(alpha - interleavedGradientNoise /* def_aref*/);
+	#endif
+	
+	// LIGHTING
+	float NdotL = saturate(dot(normalWorld, lightDirectionWorld));
+	
+	float3 radiance = L_sun_color;
+	
+	float3 diffuseIndirect, specularIndirect;
+	ComputeImageBasedLighting(diffuseIndirect, specularIndirect, normalWorld, viewDirectionWorld, L_ambient, 0, 1.0f, 1.0f);
+	
+	//
+
+	float3 outColor = diffuseColor * (/*NdotL * radiance +*/ diffuseIndirect);
+		
+	// FOG
+	/*float fogHeight = ComputeHeightFog(Input.vs_positionWorld, eye_position, dx_WeatherParams.x);
+	
+	#if 0
+		float fog = saturate(ComputeLegacyFog(Input.vs_positionView) * fogHeight);
+	#else
+		float fog = saturate(ComputeExponentialFog(Input.vs_positionView) * fogHeight);
+	#endif
+	
+	outColor = lerp(diffuseColor, float3(1,0,1), fog);*/
+	//
+	
+	outGBuffer0 = float4(outColor, 1.0f);
+}

@@ -11,7 +11,7 @@ void CRenderTarget::accum_ambient ()
 		u32			Offset					= 0;
 		Fvector2	p0, p1;
 
-		u_setrt						(rt_Accumulator,rt_AccumulatorSpecular, NULL, NULL, HW.pBaseZB);
+		u_setrt						(rt_Accumulator, rt_AccumulatorSpecular, NULL, NULL, HW.pBaseZB);
 		RCache.set_CullMode	(CULL_NONE	);
 		RCache.set_ColorWriteEnable	();
 		RCache.set_Stencil(FALSE);

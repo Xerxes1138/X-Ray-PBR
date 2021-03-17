@@ -1,0 +1,213 @@
+#include "common.h"
+#include "lmodel.h"
+#include "shadow.h"
+
+#include "stalker_Shadows.h"
+
+sampler2D s_sun_lut;
+float4 Ldynamic_dir_w;
+
+float3 FetchNormal( const float2 uv)
+{
+
+	const float3 c = tex2D(s_position, uv).xyz;
+	const float3 r = tex2D(s_position, uv + half2( +1.0 , 0.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 l = tex2D(s_position, uv + half2( -1.0 , 0.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 t = tex2D(s_position, uv + half2(  0.0, +1.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 b = tex2D(s_position, uv + half2(  0.0, -1.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 vr = ( r - c ), vl = ( c - l ), vt = ( t - c ), vb = ( c - b );
+	const float3 min_horiz = ( dot( vr, vr ) < dot( vl, vl ) ) ? vr : vl;
+	const float3 min_vert = ( dot( vt, vt ) < dot( vb, vb ) ) ? vt : vb;
+	const float3 normalScreenSpace = normalize( cross( min_horiz, min_vert ) );
+
+	return float3( normalScreenSpace.x, normalScreenSpace.y, normalScreenSpace.z );
+}
+
+float LinearDepthShadow(float z)
+{
+	return dx_Viewport_Params.x * dx_Viewport_Params.y / (dx_Viewport_Params.y - z * (dx_Viewport_Params.y - dx_Viewport_Params.x));
+}
+
+float RayAttenBorder (float2 pos, float value)
+{
+	float borderDist = min(1.0 - max(pos.x, pos.y), min(pos.x, pos.y));
+	return saturate(borderDist > value ? 1.0 : borderDist / value);
+}
+
+#ifdef USE_SUNFILTER
+float4 main( AccumVertexOuput Input ) : COLOR
+{
+	float4 positionView = tex2D(s_position, Input.tc);
+	positionView.w = 1.0f;
+	
+	float4 PS = mul(m_shadow, positionView);
+	
+	return shadowtest_sun(PS, Input.tcJ) * sunmask(positionView);
+}
+#else
+
+#ifdef STALKER_CHECKERBOARD_RENDERING
+	float4 	main(AccumVertexOuput Input) : COLOR
+#else
+	void main 
+	( 
+		AccumVertexOuput Input,
+		out float4 outDiffuse : COLOR0,
+		out float4 outSpecular : COLOR1
+	)
+#endif
+{
+	// COORD
+	float2 uv = Input.tc;
+	int2 pos = uv * STALKER_SCREEN_SIZE;
+	//
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked =  1.0f /*data.occlusion*/;
+				
+	float materialID = DecodeShadingModel(data.materialID);
+	
+	float depth = data.depth;
+	
+	float linearDepth = gBuffer0.z;//LinearDepthShadow(depth);
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+	
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+	
+	#ifdef STALKER_USE_TAA
+		interleavedGradientNoise = fmod(interleavedGradientNoise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+	
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+	
+	// BRDF
+	float3	diffuseDirect, specularDirect;
+	plight_infinity(diffuseDirect, specularDirect, specularColor, smoothness, positionView, normalView, Ldynamic_dir, materialID);
+
+	// SHADOWS
+  	float4 P4 = float4(positionView.xyz, 1.f);
+	float4 PS = mul(m_shadow, P4);
+	float shadows = sunmask(P4);
+	
+	#ifdef USE_SJITTER
+	  shadows *= shadow_jitter_sun(PS,Input.tc * STALKER_SCREEN_SIZE / 1024);
+	#else
+	  shadows *= shadow(PS);
+	#endif
+	
+    #ifdef STALKER_USE_SSRS_SUN // TODO : switch to linear depth
+		float rayLength = STALKER_SSRS_SUN_RAY_LENGTH;
+		float4 screenSpacePos  = float4(uv, positionView.z, 1.0f);
+
+        float3 L = Ldynamic_dir.xyz;
+		
+		float3 rayDir = L;
+		
+		float3 normalViewFromDepth = FetchNormal(uv);
+				
+		float lighting = dot(-L, normalViewFromDepth);
+		
+		//float3 screenSpaceReflectionVec = float3(L.xy - positionView.xy  / positionView.z * L.z, L.z / positionView.z) * dx_Projection_Params.xyz;
+		
+		float4 screenSpaceReflectionPoint = mul(dx_matrix_Projection, float4(rayDir + positionView, 1.0f));
+		screenSpaceReflectionPoint /= screenSpaceReflectionPoint.w;
+		screenSpaceReflectionPoint.xy = screenSpaceReflectionPoint.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
+		
+		float3 screenSpaceReflectionVec = normalize(screenSpaceReflectionPoint.xyz - screenSpacePos.xyz);
+		
+		const int NUM_RAY_MARCH_SAMPLES = 12;
+		
+		const float SIZE_RAY_MARCH_STEPS = (rayLength / ((float)NUM_RAY_MARCH_SAMPLES));
+		
+		float reflectionRayMarchStep = SIZE_RAY_MARCH_STEPS;
+		reflectionRayMarchStep = reflectionRayMarchStep * blueNoise.x + reflectionRayMarchStep;
+
+		float3 raySample = screenSpacePos;
+		
+		float slope = 0.0f/*-lighting*/;
+		float maxslope = 0.0;
+		float shadowsFromNormal = 0.0f; 
+		int hitFail = 0; 
+		[unroll (NUM_RAY_MARCH_SAMPLES)]
+		for (int rayStepIdx = 0; rayStepIdx < NUM_RAY_MARCH_SAMPLES; rayStepIdx++)
+		{
+			float ZBufferVal = tex2Dlod(s_position, float4(raySample.xy,0,0)).z;
+					//if(ZBufferVal <= 0 ) ZBufferVal = 1.0f;
+					
+			float delta = raySample.z - ZBufferVal;
+
+			float thickness = 0.005f / linearDepth;
+			
+			float3 tmpNormal = tex2Dlod(s_normal,  float4(raySample.xy,0,0));
+			
+			float tmpLighting = dot(-L, tmpNormal);
+
+			float shadowed = -tmpLighting;
+			shadowed *= 1.0f - saturate(abs(linearDepth - LinearDepth(ZBufferVal)));
+
+			if (slope > maxslope)
+			{
+				shadowsFromNormal = 1.0f;
+			}
+			maxslope = max(maxslope, slope);
+			
+			if (0.0f < delta && delta < thickness)
+			{
+				hitFail = 1;
+				break;
+			}
+			
+			slope += shadowed;
+			
+			raySample += screenSpaceReflectionVec * reflectionRayMarchStep;
+
+			reflectionRayMarchStep *= 1.0f + SIZE_RAY_MARCH_STEPS; // Increase step size after each iteration
+		}
+
+		shadows *= lerp(1.0f, 1.0f - (float)hitFail, RayAttenBorder(raySample.xy, 0.0125f)) /* lerp(1.0f, 1.0f - shadowsFromNormal, RayAttenBorder(raySample.xy, 0.0625f))*/;
+    #endif
+
+	float3 radiance = Ldynamic_color;
+	
+	outDiffuse = float4(diffuseDirect * radiance * shadows, 0.0f);
+	outSpecular = float4(specularDirect * radiance * shadows, 0.0f);
+}
+#endif

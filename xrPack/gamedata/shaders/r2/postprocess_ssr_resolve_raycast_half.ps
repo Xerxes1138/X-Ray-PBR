@@ -3,12 +3,25 @@
 
 uniform sampler2D s_SSR_Raycast;
 
-static const float2 offset[4] =
+static const float2 offset2x2[4] =
 {
 	float2(0, 0),
-	float2(2, -2),
-	float2(-2, -2),
-	float2(0, 2)
+	float2(1, -1),
+	float2(-1, -1),
+	float2(0, 1)
+};
+
+static const float2 offset3x3[9] =
+{
+	float2(-1, -1),
+	float2(-1, 0),
+	float2(-1, 1),
+	float2(0, -1),
+	float2(0, 0),
+	float2(0, 1),
+	float2(1, -1),
+	float2(1, 0),
+	float2(1, 1)
 };
 
 uniform sampler2D s_currentColor;
@@ -40,7 +53,7 @@ float4 	main		( v2p I )	: COLOR
 		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
 	float4 gBuffer1 = tex2D(s_normal, uv);
 	float4 gBuffer2 = tex2D(s_diffuse, uv);
-	float4 gBuffer3 = tex2D(s_depth, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
 	//
 	
 	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
@@ -52,9 +65,9 @@ float4 	main		( v2p I )	: COLOR
 	
 	float depth = data.depth;
 	
-    float linearDepth = data.position.z;//LinearDepth(depth);
+	float linearDepth = gBuffer0.z;
 		
-    float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
 
 	float3 normalView = normalize(data.normal);
 	
@@ -85,7 +98,7 @@ float4 	main		( v2p I )	: COLOR
 	
 	float4 blueNoise = tex2D(s_bluenoise, uv * STALKER_SCREEN_SIZE.xy / 1024);
 	
-	#ifdef STALKER_USE_STOCHASTIC_SSR
+	#if defined(STALKER_USE_STOCHASTIC_SSR) && defined(STALKER_USE_TAA)
 		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
 		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
 		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
@@ -101,9 +114,19 @@ float4 	main		( v2p I )	: COLOR
 	#if 1
 		float4 ssrResolveColor = 0.0;
         float weightSum = 0.0;	
-        for(int i = 0; i < 4; i++)
+        for(int i = 0; i < 9; i++)
         {
-			float2 offset = offset[i] * (1.0 / STALKER_SCREEN_SIZE);
+			float2 offset = offset3x3[i] * (2.0f / STALKER_SCREEN_SIZE);
+			
+			float2x2 offsetRotationMatrix;
+			{
+				float2 offsetRotation;
+				sincos(STALKER_TWO_PI * interleavedGradientNoise, offsetRotation.y, offsetRotation.x);
+				offsetRotationMatrix = float2x2(offsetRotation.x, offsetRotation.y, -offsetRotation.y, offsetRotation.x);
+			}
+
+			offset = mul(offsetRotationMatrix, offset);
+			
 			float2 neighborUV = uv + offset;
 			
 			float4 hitPacked = tex2Dlod(s_SSR_Raycast, float4(neighborUV, 0.0, 0.0));
@@ -112,8 +135,7 @@ float4 	main		( v2p I )	: COLOR
         
             float hitZ = tex2D(s_position, hitUv).z;
             if (hitZ <= 0)
-                hitZ = dx_Viewport_Params
-				.y;
+                hitZ = dx_Viewport_Params.y;
         
             float hitPDF = hitPacked.z;
 			float hitFail = hitPacked.w;   
@@ -129,21 +151,27 @@ float4 	main		( v2p I )	: COLOR
             float NdotV = saturate(dot(N, V));
             float NdotH = saturate(dot(N, H));
         
-            float weight = /*D_GGX(NdotH, roughness) * V_SmithGGXCorrelated(NdotL, NdotV, roughness) */ NdotL * hitPDF;
+            float weight = D_GGX(NdotH, roughness) * V_SmithGGXCorrelated(NdotL, NdotV, roughness) * NdotL * hitPDF;
 			
 			float4 sampledColor = 0.0f;
 			sampledColor.rgb = tex2Dlod(s_currentColor, float4(hitUv, 0, 0)).rgb;
             sampledColor.a = hitFail * RayAttenBorder(hitUv, STALKER_STOCHASTIC_SSR_ATTEN_BORDER);
 			
-			sampledColor /= 1 + sampledColor;
+			sampledColor /= 1.0f + sampledColor;
 			
 			ssrResolveColor += sampledColor * weight;
             weightSum += weight;
 		}
 		ssrResolveColor /= weightSum;
 		
-		ssrResolveColor /= 1 - ssrResolveColor;
+		ssrResolveColor /= 1.0f - ssrResolveColor;
+	#else
+		float4 hitPacked = tex2Dlod(s_SSR_Raycast, float4(uv, 0.0, 0.0));
+		float2 hitUv = hitPacked.xy;
+		float4 ssrResolveColor = 0.0f;
+		ssrResolveColor.rgb = tex2Dlod(s_currentColor, float4(hitUv, 0, 0));
+		ssrResolveColor.a = hitPacked.w * RayAttenBorder(hitUv, STALKER_STOCHASTIC_SSR_ATTEN_BORDER);
 	#endif
 
-    return max(1e-5f, float4(ssrResolveColor.rgb, ssrResolveColor.a));
+    return float4(ssrResolveColor.rgb, ssrResolveColor.a);
 }

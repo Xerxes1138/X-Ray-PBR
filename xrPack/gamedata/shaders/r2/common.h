@@ -33,7 +33,7 @@ float4 SampleBaseColorAndAlpha(sampler2D tex, float2 uv)
 // *** options
 
 // #define USE_GAMMA_22
-#define USE_SJITTER
+//#define USE_SJITTER
 // #define USE_SUNFILTER
 //
 //#define USE_MBLUR                	//- HW-options defined
@@ -257,6 +257,7 @@ uniform sampler2D       s_dn_a;                	//
 //////////////////////////////////////////////////////////////////////////////////////////
 // Lighting/shadowing phase                     //
 uniform sampler2D       s_depth;                //
+uniform sampler2D 		s_specular;
 uniform sampler2D       s_position;             //
 uniform sampler2D       s_normal;               //
 uniform sampler         s_lmap;             	// 2D/cube projector lightmap

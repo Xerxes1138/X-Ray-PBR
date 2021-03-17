@@ -32,6 +32,10 @@ half4 	main	( v2p I )	: COLOR
 		image	= (image * I.color + c_brightness)*2;		// mad
 //		image	= (image + c_brightness) * I.color;		// mad ?
 
+
+	// sRGB
+	image = accurateLinearToSRGB(image);	
+	
 	// out
 	return  half4	(image,1);					// +mov
 }

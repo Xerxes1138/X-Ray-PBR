@@ -5,7 +5,7 @@ half shadow_jitter(float4 tc, float2 tcJ)
 {
 	const int num = 4; 
 	
-	const float 	scale 	= (6.0f / float(SMAP_size));
+	const float 	scale 	= (4.0f / float(SMAP_size));
 	
 	float4 blueNoise = tex2D(s_bluenoise, tcJ);
 	
@@ -52,7 +52,7 @@ half shadow_jitter_sun(float4 tc, float2 tcJ)
 {
 	const int num = 4; 
 	
-	const float 	scale 	= (6.0f / float(SMAP_size));
+	const float 	scale 	= (4.0f / float(SMAP_size));
 	
 	float4 blueNoise = tex2D(s_bluenoise, tcJ);
 	

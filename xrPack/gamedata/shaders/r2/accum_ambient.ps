@@ -7,6 +7,8 @@
 #include "lmodel.h"
 #include "hmodel.h"
 
+uniform sampler2D s_reflectionColor;
+
 static const float2 offset[4] =
 {
 	float2(0, 0),
@@ -15,6 +17,18 @@ static const float2 offset[4] =
 	float2(0, 2)
 };
 
+static const float2 offset3x3[9] =
+{
+	float2(-1, -1),
+	float2(-1, 0),
+	float2(-1, 1),
+	float2(0, -1),
+	float2(0, 0),
+	float2(0, 1),
+	float2(1, -1),
+	float2(1, 0),
+	float2(1, 1)
+};
 
 float RayAttenBorder (float2 pos, float value)
 {
@@ -37,13 +51,15 @@ float4  main  (AccumVertexOuput I) : COLOR
     float2 uv = I.tc;
 	uint2 pos = uv * STALKER_SCREEN_SIZE.xy;
 	
+	float2 velocity = tex2D(s_motionVector, uv);
+			
 	// G-BUFFER
 	float4 gBuffer0 = tex2D(s_position, uv);
 		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
 		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
 	float4 gBuffer1 = tex2D(s_normal, uv);
 	float4 gBuffer2 = tex2D(s_diffuse, uv);
-	float4 gBuffer3 = tex2D(s_depth, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
 	//
 	
 	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
@@ -51,11 +67,11 @@ float4  main  (AccumVertexOuput I) : COLOR
 	// DATA
 	float ambientOcclusionBaked = data.occlusion;
 				
-	float materialID = data.materialID;
+	float materialID = DecodeShadingModel(data.materialID);
 	
 	float depth = data.depth;
 	
-	float linearDepth = LinearDepth(depth);
+	float linearDepth = gBuffer0.z;
 		
 	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
 
@@ -106,24 +122,88 @@ float4  main  (AccumVertexOuput I) : COLOR
 	float2 rotation; 
 	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
 	//
-		
-	ambientOcclusionBaked = 1.0f; //pow(ambientOcclusionBaked, 1.0f / 2.2f);//lerp(0.2f, 1.0f,ambientOcclusionBaked);
-	
-	float4 ssgi = tex2D(s_AO, uv);
 
-	float ssao = pow(saturate(ssgi.a), 2.2f);
+	float3 F_R = F_LazarovApprox(specularColor, roughness, NdotV);
+	
+	ambientOcclusionBaked = 1.0f;
+	
+	float4 ssao = tex2D(s_AO, uv);
 
 	#ifdef STALKER_BAKED_LIGHTING_SSAO_MIN_BLENDING
-		float ambientOcclusion = min(ambientOcclusionBaked, ssao); // SIGGRAPH 2014 - Moving Frostbite to Physically Based Rendering, Lagarde-deRousiers
+		float ambientOcclusion = min(ambientOcclusionBaked, ssao.a); // SIGGRAPH 2014 - Moving Frostbite to Physically Based Rendering, Lagarde-deRousiers
 	#else
-		float ambientOcclusion = ambientOcclusionBaked * ssao;
+		float ambientOcclusion = ambientOcclusionBaked * ssao.a;
 	#endif
-
 
 	// IBL
     float3 diffuseIndirect, specularIndirect;
 	ComputeImageBasedLighting(diffuseIndirect, specularIndirect, normalWorld, viewDirectionWorld, dx_SkyColor, albedo, smoothness, ambientOcclusion);
+	
+	#ifdef STALKER_USE_TAA
+		// IBL
+		float mip = (1 - smoothness) * STALKER_IBL_NUM_MIP; 
+
+		float2 Xi = blueNoise.xy;
+		//Xi.y = lerp(Xi.y, 0.0f, 0.75f); 
+
+		float4 H = TangentToWorld(normalWorld, ImportanceSampleGGX(Xi, roughness));
+
+		float3 reflectWorld = reflect(viewDirectionWorld, H.xyz);
+		reflectWorld = RotateAroundYAxis(reflectWorld, dx_SkyRotation.x);
+		
+		float3 specularCube0 = SampleIBL(s_specular_s0, reflectWorld, mip);
+		float3 specularCube1 = SampleIBL(s_specular_s1, reflectWorld, mip);
+
+		specularIndirect = dx_SkyColor.rgb * lerp(specularCube0, specularCube1, dx_SkyColor.a) * ambientOcclusion;
+		
+		float3 specularCube0Fog = SampleIBL(s_diffuse_s0, reflectWorld, 0);
+		float3 specularCube1Fog = SampleIBL(s_diffuse_s1, reflectWorld, 0);
+
+		float3 specularIndirectFog = dx_SkyColor.rgb * lerp(specularCube0Fog, specularCube1Fog, dx_SkyColor.a) * ambientOcclusion;
+		
+		specularIndirect = lerp(specularIndirect, specularIndirectFog, dx_WeatherParams.x);
+	#else
+		float3 reflectWorld = reflect(viewDirectionWorld, normalWorld);
+		reflectWorld = RotateAroundYAxis(reflectWorld, dx_SkyRotation.x);
+
+		float3 specularCube0Fog = SampleIBL(s_diffuse_s0, reflectWorld, 0);
+		float3 specularCube1Fog = SampleIBL(s_diffuse_s1, reflectWorld, 0);
+
+		float3 specularIndirectFog = dx_SkyColor.rgb * lerp(specularCube0Fog, specularCube1Fog, dx_SkyColor.a) * ambientOcclusion;
+		
+		specularIndirect = lerp(specularIndirect, specularIndirectFog, dx_WeatherParams.x);
+	#endif
+
+	#ifdef STALKER_USE_SSGI
+		float4 ssgi = tex2D(s_SSGI_Resolve, uv - velocity); 
+			
+		#ifndef STALKER_DEBUG_COMBINE_PASS
+			diffuseIndirect = lerp(diffuseIndirect, ssgi.rgb * STALKER_PI, ssgi.a);
+		#endif
+	#endif
+	
+	#ifdef STALKER_USE_STOCHASTIC_SSR // TODO : Exclude specularIndirect from skybox
+		float4 ssr = tex2D(s_reflectionColor, uv - velocity);
+			
+		if(materialID == SHADING_MODEL_STANDARD || materialID == SHADING_MODEL_CLOTH || materialID == SHADING_MODEL_SSS)
+		{
+			specularIndirect = lerp(specularIndirect, ssr.rgb, ssr.a) * F_R;
+		}			
+		else
+		{
+			specularIndirect = (float4)0.0f;
+		}
+	#else
+		if(materialID == SHADING_MODEL_STANDARD || materialID == SHADING_MODEL_CLOTH || materialID == SHADING_MODEL_SSS)
+		{
+			specularIndirect = specularIndirect * F_R;
+		}
+		else
+		{
+			specularIndirect = (float4)0.0f;
+		}
+	#endif
 
 	outIndirectDiffuse = float4(diffuseIndirect, 0.0f);
-	outIndirectSpecular = float4(0.0f, 0.0f, 0.0f, 0.0f); // specularIndirect is combined in postprocess_combine.ps with SSR
+	outIndirectSpecular = float4(specularIndirect, 0.0f);
 }

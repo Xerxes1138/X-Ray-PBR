@@ -22,7 +22,7 @@ void main
 		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
 	float4 gBuffer1 = tex2D(s_normal, uv);
 	float4 gBuffer2 = tex2D(s_diffuse, uv);
-	float4 gBuffer3 = tex2D(s_depth, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
 	//
 	
 	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
@@ -34,10 +34,9 @@ void main
 	
 	float depth = data.depth;
 	
-	float linearDepth = data.position.z /*LinearDepth(depth)*/;
+	float linearDepth = gBuffer0.z;
 		
-    float3 positionView = data.position;//
-    //float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+    float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
 
 	float3 normalView = normalize(data.normal);
 	
@@ -71,7 +70,7 @@ void main
 	
 	float2 velocity = float2(0.5f, 0.5f);
 	
-	#if defined (STALKER_USE_TAA) || defined (STALKER_USE_MBLUR) || defined (STALKER_USE_STOCHASTIC_SSR)
+	#if defined (STALKER_USE_TAA) || defined (STALKER_USE_MBLUR) || defined (STALKER_USE_STOCHASTIC_SSR) || defined (STALKER_USE_MOTION_VECTOR)
 		float4 currentClip	= mul(dx_matrix_Projection, float4(positionView, 1.0f));
 		float2 current = (currentClip.xy / currentClip.w);
 		current = current * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);

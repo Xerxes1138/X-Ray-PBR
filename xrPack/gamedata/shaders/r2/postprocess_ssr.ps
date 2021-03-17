@@ -11,7 +11,7 @@ struct 	v2p
 void main 
 ( 
 		v2p I,
-		out float4 outSSRRaycast : COLOR0
+		out float4 outSSRRaycast : COLOR
 )
 {
 	// COORD
@@ -25,7 +25,7 @@ void main
 		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
 	float4 gBuffer1 = tex2D(s_normal, uv);
 	float4 gBuffer2 = tex2D(s_diffuse, uv);
-	float4 gBuffer3 = tex2D(s_depth, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
 	//
 	
 	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
@@ -35,11 +35,11 @@ void main
 				
 	float materialID = data.materialID;
 	
-	float depth = data.depth;
+	float depth = 1 - data.depth;
 	
-	float linearDepth = LinearDepth(depth);
+	float linearDepth = gBuffer0.z;
 		
-	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+	float3 positionView = gBuffer0.xyz;//float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
 
 	float3 normalView = normalize(data.normal);
 	
@@ -70,7 +70,7 @@ void main
 	
 	float4 blueNoise = tex2D(s_bluenoise, uv * (dx_ScreenSize.xy) / 1024);
 	
-	#ifdef STALKER_USE_STOCHASTIC_SSR
+	#if defined(STALKER_USE_STOCHASTIC_SSR) && defined(STALKER_USE_TAA)
 		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
 		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
 		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
@@ -113,12 +113,12 @@ void main
 		[unroll (NUM_RAY_MARCH_SAMPLES)]
 		for (int rayStepIdx = 0; rayStepIdx < NUM_RAY_MARCH_SAMPLES; rayStepIdx++)
 		{
-			float ZBufferVal = tex2Dlod(s_position, float4(raySample.xy,0,0)).w;
+			float ZBufferVal = 1.0f - tex2Dlod(s_position, float4(raySample.xy,0,0)).w;
 					if(ZBufferVal <= 0 ) ZBufferVal = 1.0f;
 					
 			float delta = raySample.z - ZBufferVal;
 
-			float thickness = /*-dx_SSR_Projection.z*/ 0.01f / positionView.z;
+			float thickness = /*-dx_SSR_Projection.z*/ 0.02f / positionView.z;
 	
 			if (0.0f < delta && delta < thickness)
 			{
@@ -134,5 +134,5 @@ void main
 
     outSSRRaycast.xy = raySample.xy;
     outSSRRaycast.z = 1.0f / H.w;
-    outSSRRaycast.w = (float) hitFail;
+    outSSRRaycast.w = (float)hitFail;
 }

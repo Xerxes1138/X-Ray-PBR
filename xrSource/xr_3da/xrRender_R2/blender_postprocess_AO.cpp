@@ -65,7 +65,7 @@ void	CBlender_postprocess_AO_temporal::Compile(CBlender_Compile& C)
 	C.r_Sampler_rtf		("s_motionVector",	r2_RT_motionVector);
 
 	C.r_Sampler_rtf		("s_currentColor",	r2_RT_AO_Resolve);
-	C.r_Sampler_rtf		("s_previousColor",	r2_RT_AO_Temporal);
+	C.r_Sampler_clf		("s_previousColor",	r2_RT_AO_Temporal);
 
 	C.r_Sampler_rtf		("s_smap",			r2_RT_smap_depth);
 

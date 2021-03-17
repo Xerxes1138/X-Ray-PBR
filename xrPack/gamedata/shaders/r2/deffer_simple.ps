@@ -2,11 +2,11 @@
 
 void main 
 ( 
-	VertexOuput Input,
-    out float4 outGBuffer0 : COLOR0,    // rgb = View position,  a = Depth - FP32
-    out float4 outGBuffer1 : COLOR1,    // rgb = View normal, a = mat ID - FP16
-	out float4 outGBuffer2 : COLOR2,    // rgb = Diffuse albedo, a = baked lighting - A8R8G8B8
-	out float4 outGBuffer3 : COLOR3     // rgb = Specular albedo, a = smoothness - A8R8G8B8
+	VertexOutput_GBUFFER Input,
+    out float4 outGBuffer0 : COLOR0,
+    out float4 outGBuffer1 : COLOR1,
+	out float4 outGBuffer2 : COLOR2,
+	out float4 outGBuffer3 : COLOR3
 )
 {
 	float2 screenUV = Input.vs_screenPos.xy / Input.vs_screenPos.w;
@@ -23,6 +23,20 @@ void main
 	
 	float3 positionView = Input.vs_positionView;
 	float3 normalView = normalize(Input.vs_normalView);
+		
+	float2 velocity = float2(0.5f, 0.5f);
+		
+	#if 0
+		float4 currentClip	= mul(m_P, float4(positionView, 1.0f));
+		float2 current = (currentClip.xy / currentClip.w);
+		current = current * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+
+		float4 previousClip	= mul(m_previous_P, float4(positionView, 1.0f));
+		float2 previous =  (previousClip.xy / previousClip.w);
+		previous = previous * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+
+		velocity = (current - previous);
+	#endif
 	
 	GBufferData data;
 	data.position = positionView;
@@ -30,6 +44,8 @@ void main
 	data.diffuseColor = albedo.rgb;
 	data.specularColor = (float3)0.04f;
 	
+	//data.velocity = velocity;
+		
 	data.materialID					= xmaterial;
 	data.smoothness					= 0.0f;
 	data.occlusion					= 1.0f;

@@ -20,13 +20,11 @@ float4 	main	( VertexOuput_Particle Input )	: COLOR
 		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
 	float4 gBuffer1 = tex2D(s_normal, positionScreen);
 	float4 gBuffer2 = tex2D(s_diffuse, positionScreen);
-	float4 gBuffer3 = tex2D(s_depth, positionScreen);
+	float4 gBuffer3 = tex2D(s_specular, positionScreen);
 	//
 	
-	float4 c = tex2D(s_base, Input.vs_textureCoord);
-	
-	// sRGB
-	c = pow(c, 2.2f);
+	float4 c = SampleBaseColorAndAlpha(s_base, Input.vs_textureCoord);
+	//c.rgb = lerp(c.rgb, gBuffer0.z, c.a);
 	
 	c.rgb *= Input.vs_vertexColor.rgb;
 	

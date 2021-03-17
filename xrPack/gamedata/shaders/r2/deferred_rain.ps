@@ -1,0 +1,231 @@
+#include "common.h"
+#include "lmodel.h"
+
+#include "shadow.h"
+float3x4 m_sunmask;
+
+uniform float4x4	m_rain_shadow;
+
+struct         _input
+{
+	//float4         hpos	: POSITION        ;
+	float4         tc                : TEXCOORD0        ; 
+	float2         tcJ                : TEXCOORD1       ; 
+};
+
+sampler2D	s_patched_normal;
+sampler2D	s_Rain_Puddle;
+sampler2D	s_Rain_Ripple;
+
+float SoftLight (float cBase, float cBlend)
+{
+	float isLessOrEq = step(cBlend, 0.5);
+	float cNew = lerp(1 - (1 - cBase)*(1 - 2*cBlend*cBase), cBase*(1 - (1 - cBase)*(1 - 2*cBlend)), isLessOrEq);
+	return cNew;
+}
+
+float3 FetchNormal( const float2 uv)
+{
+
+	const float3 c = tex2D(s_position, uv).xyz;
+	const float3 r = tex2D(s_position, uv + half2( +1.0 , 0.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 l = tex2D(s_position, uv + half2( -1.0 , 0.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 t = tex2D(s_position, uv + half2(  0.0, +1.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 b = tex2D(s_position, uv + half2(  0.0, -1.0 ) * STALKER_SCREEN_SIZE.zw ).xyz;
+	const float3 vr = ( r - c ), vl = ( c - l ), vt = ( t - c ), vb = ( c - b );
+	const float3 min_horiz = ( dot( vr, vr ) < dot( vl, vl ) ) ? vr : vl;
+	const float3 min_vert = ( dot( vt, vt ) < dot( vb, vb ) ) ? vt : vb;
+	const float3 normalScreenSpace = normalize( cross( min_horiz, min_vert ) );
+
+	return float3( normalScreenSpace.x, normalScreenSpace.y, normalScreenSpace.z );
+}
+
+void main 
+( 
+	_input Input,
+    out float4 outGBuffer0 : COLOR0,
+	out float4 outGBuffer1 : COLOR1,
+	out float4 outGBuffer2 : COLOR2,
+	out float4 outGBuffer3 : COLOR3
+)
+{
+	// COORD
+	float2 uv = Input.tc;
+	int2 pos = uv * STALKER_SCREEN_SIZE;
+	//
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked = data.occlusion;
+				
+	float materialID = DecodeShadingModel(data.materialID);
+	
+	float depth = data.depth;
+	
+	float linearDepth = gBuffer0.z;//LinearDepthShadow(depth);
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	float3 normalViewFromDepth = FetchNormal(uv);
+	 
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+		
+	// SHADOWS
+	float4 P4 = float4(positionView.xyz + normalView * data.occlusion * 0.5f, 1.f);
+	float4 PS = mul(m_rain_shadow, P4);
+	
+	float3 positionWorld = mul( m_sunmask, float4(positionView, 1.0f) );
+	float3 normalWorld = normalize(mul((float3x3)m_sunmask, normalView));
+	float3 normalWorldFromDepth = normalize(mul((float3x3)m_sunmask, normalViewFromDepth));
+	//
+
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+		
+	float interleavedGradientNoise = InterleavedGradientNoise(uv * (STALKER_SCREEN_SIZE.xy));
+	
+	#ifdef STALKER_USE_TAA
+		interleavedGradientNoise = fmod(interleavedGradientNoise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+	
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	
+	const float2 blueNoiseRand[4] = {blueNoise.xy , blueNoise.zw , float2(-blueNoise.y, blueNoise.x) , float2(-blueNoise.w, blueNoise.z)};
+	//
+
+	float4 rainJitter = tex2D(s_bluenoise, positionWorld.xz / 8.0f);
+
+	const float scale = (32.0f / float(SMAP_size));
+
+	float dist = sqrt(rainJitter.y); // Uniform
+	
+	float s, c;
+	sincos(rainJitter.x * STALKER_TWO_PI, s, c);
+	float2 rot = float2(c, s);
+
+	float2 offset = rot * dist * scale;
+
+	float rainShadow = tex2Dproj(s_smap, float4(PS.xy + PS.w * offset, PS.zw)).x;
+	
+	#if 1
+		// Slope
+		if(materialID == SHADING_MODEL_SSS || materialID == SHADING_MODEL_FOLIAGE)
+		{
+			rainShadow *= saturate((normalWorld.y) / 1.0f);
+		}
+		else
+			rainShadow *= saturate((normalWorld.y) / 0.1f) * normalWorldFromDepth.y;
+	
+		//float fade = saturate((length(positionView) - STALKER_RAIN_FADE_DISTANCE) / STALKER_RAIN_FADE_FALLOFF );
+		float fadeEnd = STALKER_RAIN_FADE_DISTANCE;
+		float fadeStart = 45;
+		float fade = saturate((fadeEnd - length(positionView)) / (fadeEnd - fadeStart));
+		rainShadow	= lerp(rainShadow, 1.0f, 1.0f - fade);
+	#endif
+	
+	float4 TimeMul = float4(1.0f, 0.85f, 0.93f, 1.13f); 
+	float4 TimeAdd = float4(0.0f, 0.2f, 0.45f, 0.7f);
+	float4 Times = (timers.x * TimeMul + TimeAdd) * 1.6f;
+	Times = frac(Times);
+				
+	float4 Weights = dx_WeatherParams.x - float4(0, 0.25, 0.5, 0.75);
+	Weights = saturate(Weights * 4);
+	
+	half3 rippleNormal1 = ComputeRipple(s_Rain_Ripple, positionWorld.xz + float2( 0.25f,0.0f), Times.x, Weights.x);
+	half3 rippleNormal2 = ComputeRipple(s_Rain_Ripple, positionWorld.xz + float2(-0.55f,0.3f), Times.y, Weights.y);
+	half3 rippleNormal3 = ComputeRipple(s_Rain_Ripple, positionWorld.xz + float2(0.6f, 0.85f), Times.z, Weights.z);
+	half3 rippleNormal4 = ComputeRipple(s_Rain_Ripple, positionWorld.xz + float2(0.5f,-0.75f), Times.w, Weights.w); 
+
+	float4 Z = lerp(1.0f, float4(rippleNormal1.z, rippleNormal2.z, rippleNormal3.z, rippleNormal4.z), Weights);
+					
+	float3 rippleNormal = float3
+	(
+						Weights.x * rippleNormal1.xy +
+						Weights.y * rippleNormal2.xy + 
+						Weights.z * rippleNormal3.xy + 
+						Weights.w * rippleNormal4.xy, Z.x * Z.y * Z.z * Z.w
+	);
+	rippleNormal = normalize(rippleNormal);
+			
+	float smoothnessWater = 0.98f;
+
+	float puddleSource = 1.0f - saturate(tex2D(s_Rain_Puddle, positionWorld.xz / 40) - 0.25f);
+	float height = data.occlusion;
+	
+	float slope = saturate((normalWorld.y) / 1.0f);
+	
+	float wet = rainShadow * dx_WeatherParams.x;
+	float flood = rainShadow * dx_WeatherParams.x;
+	float puddle = rainShadow * dx_WeatherParams.x;
+	
+	// TODO : add a smoothness and a normal map for foliage
+	if(materialID == SHADING_MODEL_FOLIAGE)
+	{
+		smoothness = 1.0f;
+	}
+	
+	if(materialID == SHADING_MODEL_SSS || materialID == SHADING_MODEL_FOLIAGE)
+	{
+		flood = 0.0f;
+		puddle = 0.0f;
+	}
+
+	// Get depth/accumulation water information
+	float2 accumulatedWaters = 0.0f;
+	
+	// Get the "size" of the accumulated water in a hole/cracks
+	accumulatedWaters.x = min(flood, 1.0f - height);
+	
+	// Get the size of the accumlated water in puddle taking into account the 
+	// marging (0.4 constant here)
+	accumulatedWaters.y = saturate((puddle - puddleSource) / 0.4f);
+	
+	// Mix vertex color and height map accumulated water by taking the higher
+	float accumulatedWater = max(accumulatedWaters.x, accumulatedWaters.y);
+
+	// WetLevel could be 0 but we can still require to have wet surface
+	// if there is accumulated water.
+	float newWetLevel = saturate(wet + accumulatedWater);
+
+	float metallic = 0.0f; //saturate((dot(0.04f, 0.33f) * 1000 - 500));
+
+	// Calculate the surface wet BRDF parameters for the new wet level
+	DoWetProcess(albedo, smoothness, metallic, newWetLevel);
+
+	smoothness = lerp(smoothness, smoothnessWater, accumulatedWater);
+	normalView = lerp(normalView, TangentToWorld(normalViewFromDepth, float4(rippleNormal, 1.0f)).xyz , accumulatedWater);	
+			
+	outGBuffer0 = float4(data.position, data.depth);
+	outGBuffer1 = float4(normalView, data.materialID);
+	outGBuffer2 = float4(accurateLinearToSRGB(albedo), data.occlusion);
+	outGBuffer3 = float4(accurateLinearToSRGB((float3)0.04f), smoothness);
+}

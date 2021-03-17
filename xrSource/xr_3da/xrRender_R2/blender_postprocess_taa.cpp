@@ -17,8 +17,8 @@ void	CBlender_postprocess_taa::Compile(CBlender_Compile& C)
 	C.r_Sampler_rtf		("s_diffuse",		r2_RT_albedo);
 	C.r_Sampler_rtf		("s_specular",		r2_RT_specular);
 
-	C.r_Sampler_clf		("s_motionVector",	r2_RT_motionVector);
-	C.r_Sampler_clf		("s_currentColor",	r2_RT_generic0);
+	C.r_Sampler_rtf		("s_motionVector",	r2_RT_motionVector);
+	C.r_Sampler_rtf		("s_currentColor",	r2_RT_generic0);
 	C.r_Sampler_clf		("s_previousColor",	r2_RT_previousColor);
 
 	C.r_Sampler			("s_bluenoise", "engine\\LDR_RGBA_0", false, D3DTADDRESS_WRAP, D3DTEXF_POINT, D3DTEXF_NONE, D3DTEXF_POINT, FALSE);

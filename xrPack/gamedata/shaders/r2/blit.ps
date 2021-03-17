@@ -10,7 +10,7 @@ struct BlitVertexInput
 half4 	main		( BlitVertexInput I )	: COLOR
 {
 	// COORD
-	half2 uv = I.tc0;
+    float2 uv = I.tc0;
 
  	return tex2D(s_currentColor, uv);
 }

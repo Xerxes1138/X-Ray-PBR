@@ -7,11 +7,12 @@ struct GBufferData
 	float	occlusion;
 	float	smoothness;
 	float	depth;
-
+	
+	float3	position;
 	float3	diffuseColor;
 	float3	specularColor;
 	float3	normal;
-	float3	position;
+
 };
 
 void DataToGBuffer(GBufferData data, out float4 outGBuffer0, out float4 outGBuffer1, out float4 outGBuffer2, out float4 outGBuffer3)
@@ -27,14 +28,14 @@ void DataToGBuffer(GBufferData data, out float4 outGBuffer0, out float4 outGBuff
 
 GBufferData DataFromGBuffer(float4 inGBuffer0, float4 inGBuffer1, float4 inGBuffer2, float4 inGBuffer3)
 {
-	GBufferData data;
-	
+	GBufferData data = (GBufferData) 0;
+		
 	data.depth						= inGBuffer0.a;
 	data.materialID					= inGBuffer1.a;
 	data.occlusion					= inGBuffer2.a;
 	data.smoothness					= inGBuffer3.a;
-		
-	data.position					= inGBuffer0.rgb;			
+
+	data.position					= inGBuffer0.rgb;		
 	data.normal						= inGBuffer1.rgb;
 	data.diffuseColor				= accurateSRGBToLinear(inGBuffer2.rgb);
 	data.specularColor				= accurateSRGBToLinear(inGBuffer3.rgb);
@@ -42,5 +43,6 @@ GBufferData DataFromGBuffer(float4 inGBuffer0, float4 inGBuffer1, float4 inGBuff
 
 	return data;
 }
+
 
 #endif

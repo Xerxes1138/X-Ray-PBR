@@ -26,9 +26,9 @@ void CBlender_blit_taa::Compile(CBlender_Compile& C)
 
 	C.r_Pass("null", "blit_taa", FALSE,	FALSE, FALSE);
 
-	C.r_Sampler_clf("s_currentColor", r2_RT_currentColor);
+	C.r_Sampler_rtf("s_currentColor", r2_RT_currentColor);
 	C.r_Sampler_clf("s_previousColor", r2_RT_previousColor);
-	C.r_Sampler_clf("s_motionVector",	r2_RT_motionVector);
+	C.r_Sampler_rtf("s_motionVector",	r2_RT_motionVector);
 
 	C.r_End();
 }
@@ -42,8 +42,16 @@ void CBlender_blit_ssgi_recursive::Compile(CBlender_Compile& C)
 
 	C.r_Pass("null", "blit_ssgi_recursive", FALSE,	FALSE, FALSE);
 
-	C.r_Sampler_clf("s_currentColor", r2_RT_previousColor /*r2_RT_generic0*/);
-	C.r_Sampler_clf("s_motionVector", r2_RT_motionVector);
+	if (RImplementation.o.temporalAA)
+	{
+		C.r_Sampler_rtf("s_currentColor", r2_RT_previousColor);
+	}
+	else
+	{
+		C.r_Sampler_rtf("s_currentColor",  r2_RT_generic0);
+	}
+
+	C.r_Sampler_rtf("s_motionVector", r2_RT_motionVector);
 
 	C.r_End();
 }
@@ -57,8 +65,8 @@ void CBlender_blit_ssao::Compile(CBlender_Compile& C)
 
 	C.r_Pass("null", "blit", FALSE,	FALSE, FALSE);
 
-	C.r_Sampler_clf("s_currentColor", r2_RT_AO_Resolve);
-	C.r_Sampler_clf("s_motionVector", r2_RT_motionVector);
+	C.r_Sampler_rtf("s_currentColor", r2_RT_AO_Resolve);
+	C.r_Sampler_rtf("s_motionVector", r2_RT_motionVector);
 
 	C.r_End();
 }
@@ -72,8 +80,8 @@ void CBlender_blit_ssgi::Compile(CBlender_Compile& C)
 
 	C.r_Pass("null", "blit", FALSE,	FALSE, FALSE);
 
-	C.r_Sampler_clf("s_currentColor", r2_RT_SSGI);
-	C.r_Sampler_clf("s_motionVector", r2_RT_motionVector);
+	C.r_Sampler_rtf("s_currentColor", r2_RT_SSGI);
+	C.r_Sampler_rtf("s_motionVector", r2_RT_motionVector);
 
 	C.r_End();
 }
@@ -88,8 +96,8 @@ void CBlender_blit_ssr::Compile(CBlender_Compile& C)
 
 	C.r_Pass("null", "blit", FALSE,	FALSE, FALSE);
 
-	C.r_Sampler_clf("s_currentColor", r2_RT_SSR_Reflection);
-	C.r_Sampler_clf("s_motionVector",	r2_RT_motionVector);
+	C.r_Sampler_rtf("s_currentColor", r2_RT_SSR_Resolve);
+	C.r_Sampler_rtf("s_motionVector",	r2_RT_motionVector);
 
 	C.r_End();
 }
@@ -103,7 +111,7 @@ void CBlender_postprocess_fog_scattering::Compile(CBlender_Compile& C)
 
 	C.r_Pass("null", "postprocess_fog_scattering", FALSE,	FALSE, FALSE);
 
-	C.r_Sampler_clf("s_currentColor", r2_RT_generic1);
+	C.r_Sampler_rtf("s_currentColor", r2_RT_generic1);
 	C.r_Sampler		("s_bluenoise", "engine\\LDR_RGBA_0", false, D3DTADDRESS_WRAP, D3DTEXF_POINT, D3DTEXF_NONE, D3DTEXF_POINT, FALSE);
 
 	C.r_End();

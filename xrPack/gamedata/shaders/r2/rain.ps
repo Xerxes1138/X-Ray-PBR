@@ -1,9 +1,9 @@
-#include "common.h"
-#include "hmodel.h"
+#define USE_AREF
 
-#define STALKER_WATER_EDGE 0.03125f
-#define STALKER_WATER_MEDIUM_COLOR accurateSRGBToLinear(float3(0.8396226, 0.6315807, 0.368325))
-#define STALKER_WATER_FOG_COLOR STALKER_WATER_MEDIUM_COLOR
+#include "common.h"
+
+uniform sampler2D 		s_blueNoise;
+uniform sampler2D		s_sceneColor;
 
 float RayAttenBorder (float2 pos, float value)
 {
@@ -35,99 +35,125 @@ float2 RefractionCoord(float3 V, float3 N)
 
 	return refractionScreenUV;
 }
-			
-float3 TangentToWorld(float3 i_tangent, float3 i_binormal, float3 i_normal, float3 dir)
-{
-	return normalize(((i_tangent * dir.x) + (i_binormal * dir.y) + (i_normal * dir.z)));
-}
 
-// Schlick 1994, "An Inexpensive BRDF Model for Physically-Based Rendering"
-// Lagarde 2012, "Spherical Gaussian approximation for Blinn-Phong, Phong and Fresnel"
-float3 F_Schlick(float3 SpecularColor, float LdotH)
-{
-    return SpecularColor + ( 1.0f - SpecularColor ) * exp2( (-5.55473 * LdotH - 6.98316) * LdotH );
-}
-
-struct   vf
-{
-        float4         hpos        :         POSITION        ;
-        float2  tbase        :        TEXCOORD0        ;  // base
-        float3         M1                :        TEXCOORD3        ;
-        float3         M2                :        TEXCOORD4        ;
-        float3         M3                :        TEXCOORD5        ;
-        float4        c0                :          COLOR0                ;
-        float          fog        :         FOG                ;
-		float4          screenPos        :         TEXCOORD7                ;
-		float3          positionWorld       :         TEXCOORD6               ;
-};
-
-uniform	sampler2D		s_nmap;
-uniform	sampler2D		s_wnmap;
-
-uniform sampler2D		s_sceneColor;
-
-////////////////////////////////////////////////////////////////////////////////
-// Pixel
 void main 
 ( 
-	vf I,
+	VertexOutput_FORWARD Input,
     out float4 outGBuffer0 : COLOR0
 )
 {
-		float2 screenUV = I.screenPos.xy / I.screenPos.w;
-
-		float4 positionView = tex2D(s_position, screenUV);
+	// COORD
+	float2 uv = Input.vs_textureCoord;
+	float2 uvScreen = Input.vs_positionScreen.xy / Input.vs_positionScreen.w;
+	int2 pos = uvScreen * STALKER_SCREEN_SIZE.xy;
+	
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_blueNoise, uvScreen * STALKER_SCREEN_SIZE.xy / 1024);
+	
+	#ifdef STALKER_USE_TAA
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
 		
-		float3 normalTangent = normalize(tex2D(s_nmap, I.tbase) * 2 - 1);
-		//normalTangent = lerp(float3(0,0,1), normalTangent, 0.25f);
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+	
+	#ifdef STALKER_USE_TAA
+		interleavedGradientNoise = fmod(interleavedGradientNoise + (GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+	//
+	float4 albedo = tex2D(s_base, uv);
+	
+	float smoothness = lerp(0.7f, 1.0f, 1.0f - albedo.a);
+	
+	float roughness = max(1.0f - smoothness, 0.0f);
+		
+	float mip = (1 - smoothness) * STALKER_IBL_NUM_MIP; 
+
+	float2 Xi = blueNoise.xy;
+	//Xi.y = lerp(Xi.y, 0.0f, 0.75f); 
+	
+	float3 normalTangent = tex2D(s_bump, uv);
+	normalTangent.y = 1.0f - normalTangent.y;
+	normalTangent = normalize(normalTangent * 2.0f - 1.0f);
+		
+	float3 normalWorld = TangentToWorld(normalize(Input.vs_positionWorld), float4(normalTangent, 1.0f)) ;
+	float3 viewDirectionWorld = normalize(Input.vs_positionWorld - eye_position);
+	
+	float3 reflectWorld = reflect(viewDirectionWorld, normalWorld);
+	reflectWorld = RotateAroundYAxis(reflectWorld, dx_SkyRotation.x);
+	
+	float2 reflectionCoord = ReflectionCoord(viewDirectionWorld, normalWorld);
+
+	// REFLECTION
+	float3 specularCube0 = SampleIBL(s_specular_s0, reflectWorld, 0);
+	float3 specularCube1 = SampleIBL(s_specular_s1, reflectWorld, 0);
+
+	float3 specularIndirect = L_ambient.rgb * lerp(specularCube0, specularCube1, L_ambient.a);
+
+	float3 reflectionColor = tex2D(s_sceneColor, reflectionCoord);
+	
+	float reflectionMask = saturate(dot(viewDirectionWorld, reflect(viewDirectionWorld, normalWorld)));
+	
+	reflectionColor = specularIndirect;//reflectionColor * RayAttenBorder(reflectionCoord, 0.25f) * reflectionMask; //lerp(specularIndirect, reflectionColor, RayAttenBorder(reflectionCoord, 0.25f) * reflectionMask);
+	//
+		
+	float NdotV = saturate(dot(normalWorld, -viewDirectionWorld));
+
+	float3 F = F_LazarovApprox(0.04f, roughness, NdotV);
+	
+	float2 refractionCoord = RefractionCoord(viewDirectionWorld, normalWorld);
+
+	float3 sceneColor = tex2D(s_sceneColor, uvScreen + normalTangent.xy * 0.1f).rgb;
+	
+	#if 1
+		const int stochasticTaps = 4;
+		
+		const float2 blueNoiseRand[stochasticTaps] = {blueNoise.xy , blueNoise.zw , float2(-blueNoise.y, blueNoise.x) , float2(-blueNoise.w, blueNoise.z)};
+	
+		float stochasticSum = 0.0f;
+		float4 stochasticBlur = 0.0f;
+		for (int k = 0; k < stochasticTaps; k++)
+		{
+			float dist = sqrt(blueNoiseRand[k].y); // Uniform
+			
+			if (0)
+				dist = pow((blueNoiseRand[k].y - 1), 2.0f); // Bloom
+			
+			if (1)
+				dist = sqrt(-2.0f * log(blueNoiseRand[k].y)); // Gaussian
+		
+			float sinTheta, cosTheta;
+			float theta = blueNoiseRand[k].x * STALKER_TWO_PI;
+			sincos(theta, sinTheta, cosTheta);
+			float2 rotation = float2(cosTheta, sinTheta);
+
+			float2 offset = rotation * dist * STALKER_SCREEN_SIZE.zw  * 100.0f;
+			 
+			float weight = 1.0f;
+			
+			float4 sampledColor = tex2D(s_sceneColor, uvScreen + offset);
+			
+			sampledColor /= 1.0f + sampledColor;
 				
-		float3 V = normalize(I.positionWorld - eye_position);
-
-        float4 diffuseColor = SampleBaseColorAndAlpha(s_base, I.tbase);
+			stochasticBlur += sampledColor * weight;
+			stochasticSum += weight;
+		}
+		stochasticBlur = stochasticBlur / stochasticSum;
 		
-		float3 normalWorld = TangentToWorld(I.M1, I.M2, I.M3, normalTangent);
-				
-		// REFRACTION
-		float2 refractionCoord = RefractionCoord(V, normalWorld);
-		//
+		stochasticBlur /= 1.0f - stochasticBlur;
+	
+        sceneColor = (sceneColor + stochasticBlur) * 0.5f;
+	#endif
+	
+	//sceneColor = lerp(sceneColor, reflectionColor, F);
 		
-		float4 sceneColor = tex2D(s_sceneColor, screenUV + normalTangent * 0.3f);
-		
-
-
-		
-		float3 diffuseIBL, specularIBL;
-		ComputeImageBasedLighting(diffuseIBL, specularIBL, normalWorld, V, L_ambient, 0);
-		
-		float3 fogIBL;
-		//V = RotateAroundYAxis(V, dx_SkyRotation.x);
-
-		float3 fogCube0 = SampleIBL(env_s0, V);
-		float3 fogCube1 = SampleIBL(env_s1, V);
-
-		fogIBL = L_ambient.rgb * lerp(fogCube0, fogCube1, L_ambient.a);
-
-        float NdotV = saturate(dot(normalWorld, -V));
-        float F = F_Schlick(0.02f, NdotV);                
-
-
-		// REFLECTION
-		float2 reflectionCoord = ReflectionCoord(V, normalWorld);
-		
-		float reflectionMask = saturate(dot(V, reflect(V, normalWorld)));
-
-		float3 reflectionColor = tex2D(s_sceneColor, reflectionCoord);
-		reflectionColor = lerp(specularIBL, reflectionColor, RayAttenBorder(reflectionCoord, 0.25f) * reflectionMask);
-		//
-		
-
-		
-		float3 final = I.c0.rgb * sceneColor * I.c0.a;
- 
-		float softEdge = saturate((positionView.z - I.screenPos.z) / 0.1f);
-		
-		// FOG
-		final = lerp(final, fogIBL, I.fog);
-
-		outGBuffer0 = float4(final, diffuseColor.a);
+	outGBuffer0 = float4(sceneColor /*sceneColor * albedo.rgb*/, albedo.a);
 }

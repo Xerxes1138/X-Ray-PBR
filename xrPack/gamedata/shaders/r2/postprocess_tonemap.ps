@@ -7,10 +7,12 @@
 #define USE_DISTORT	//- shader defined
 #define	EPSDEPTH 1e-5f
 
-uniform sampler2D s_motionVector;
 uniform sampler2D s_currentColor;
 uniform sampler2D s_distort;
 uniform sampler2D s_accumulator_ssgi;
+
+uniform sampler2D s_SSR_Raycast, s_reflectionColor;
+
 struct TonemapVertexInput      
 {
 	float2 tc0	: TEXCOORD0;
@@ -19,8 +21,39 @@ struct TonemapVertexInput
 float4 	main( TonemapVertexInput I ) : COLOR
 {
 	// COORD
-    float2 uv = I.tc0;
+	float2 uv = I.tc0;
 	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	//
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked =  1.0f /*data.occlusion*/;
+				
+	float materialID = DecodeShadingModel(data.materialID);
+	
+	float depth = data.depth;
+	
+	float linearDepth = gBuffer0.z;
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
 	
 	// RANDOM
 	float dither =	 Dither8x8Bayer
@@ -29,7 +62,7 @@ float4 	main( TonemapVertexInput I ) : COLOR
 		fmod(pos.y, 8.0f)
 	);
 	
-	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
+	float4 blueNoise = tex2D(s_bluenoise, uv * STALKER_SCREEN_SIZE.xy / 1024);
 	
 	#ifdef STALKER_USE_TAA
 		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
@@ -47,7 +80,6 @@ float4 	main( TonemapVertexInput I ) : COLOR
     float3 currentColor = tex2D(s_currentColor, uv);
 
     #ifdef USE_DISTORT
-  	    float depth = tex2D(s_position, uv).z;
 	    float4 distort = tex2D(s_distort, uv);
 
 	    float2 offset = (distort.xy - 0.5f) * def_distort;
@@ -70,47 +102,12 @@ float4 	main( TonemapVertexInput I ) : COLOR
 	
 	float4 bloom = (bloom1 + bloom2 + bloom3 + bloom4) / 4.0f;
 		
-    currentColor += max(1e-5f, bloom.rgb);
-
-	#if 0
-		const int stochasticTaps = 4;
-		
-		const float2 blueNoiseRand[stochasticTaps] = {blueNoise.xy , blueNoise.zw , float2(-blueNoise.y, blueNoise.x) , float2(-blueNoise.w, blueNoise.z)};
-	
-		float stochasticSum = 0.0f;
-		float3 stochasticBlur = 0.0f;
-		for (int k = 0; k < stochasticTaps; k++)
-		{
-			float dist = sqrt(blueNoiseRand[k].y); // Uniform
-			
-			if (1)
-				dist = pow((blueNoiseRand[k].y - 1), 2.0f); // Bloom
-			
-			float s, c;
-			float a = blueNoiseRand[k].x;
-			sincos(a * STALKER_TWO_PI, s, c);
-			float2 rot = float2(c, s);
-
-			offset += rot * dist * STALKER_SCREEN_SIZE.zw * 25.0f /* (distort.a - 0.5f)*/;
-			
-			float weight = 1.0f; // box
-			//float weight = stochasticTaps - abs(k) + 1; // triangle
-			//float weight = 1.0 / (1 + abs(k)); // pointy triangle
-			
-			stochasticBlur += tex2D(s_currentColor, uv + offset).rgb * weight;
-			stochasticSum += weight;
-		}
-		stochasticBlur = stochasticBlur / stochasticSum;
-
-        currentColor += stochasticBlur;
-	#endif
+    //currentColor += max(1e-5f, bloom.rgb);
 
 	// TONE-MAPPING CURVE
 	#ifndef STALKER_DEBUG_COMBINE_PASS
 		#ifdef STALKER_USE_TONEMAP
 			#ifdef STALKER_TONEMAP_HABLE 
-				//currentColor = accurateSRGBToLinear(currentColor);
-				
 				//Hable Curve
 				const float A = 0.15f;
 				const float B = 0.50f;
@@ -140,6 +137,48 @@ float4 	main( TonemapVertexInput I ) : COLOR
     // LUT
     // LUT code should be here
     //
+	
+	// DEBUG
+	#ifdef STALKER_DEBUG_PBR_ALBEDO
+		float luminance = dot(albedo, float3(0.2126f, 0.7152f, 0.0722f));
+
+		float toCheck = luminance /*smoothness*/;
+		
+		float minRange = 0.012983032342173f /*0.0318960330730115f*/;
+		float maxRange = 0.896269353374266f;
+		
+		albedo = accurateLinearToSRGB(albedo);
+		
+		if(toCheck >= minRange && toCheck <= maxRange)
+		{
+			currentColor.rgb = uv.x < STALKER_DEBUG_DIVIDER ? float3(0,1,0) : albedo;
+		}
+		else
+		{
+			currentColor.rgb = uv.x < STALKER_DEBUG_DIVIDER ? float3(1,0,0) : albedo;
+		}
+	#endif
+
+	#ifdef STALKER_DEBUG_MATERIAL_ID
+		if(materialID == SHADING_MODEL_STANDARD)
+		{
+			currentColor.rgb = float3(1,0,0);
+		}
+		else if(materialID == SHADING_MODEL_CLOTH)
+		{
+			currentColor.rgb = float3(0,1,0);
+		}
+			else if(materialID == SHADING_MODEL_SSS)
+		{
+			currentColor.rgb = float3(0,0,1);
+		}
+		else if(materialID == SHADING_MODEL_FOLIAGE)
+		{
+			currentColor.rgb = float3(0,1,1);
+		}
+	#endif
+	
+	//currentColor = tex2D(s_AO, uv).a;
 	
 	return  float4(currentColor + blueNoise.w / 255.0f, 1.0f);
 }

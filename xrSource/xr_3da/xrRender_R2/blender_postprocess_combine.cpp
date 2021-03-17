@@ -22,7 +22,7 @@ void	CBlender_postprocess_combine::Compile(CBlender_Compile& C)
 
 	C.r_Sampler_rtf		("s_SSGI_Resolve",			r2_RT_SSGI_Previous);
 
-	C.r_Sampler_rtf		("s_reflectionColor",		r2_RT_SSR_Reflection_Previous);
+	C.r_Sampler_rtf		("s_reflectionColor",		r2_RT_SSR_Temporal);
 	
 	C.r_Sampler_rtf		("s_AO",					r2_RT_AO_Temporal);
 

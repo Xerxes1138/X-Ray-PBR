@@ -12,7 +12,7 @@ local tex_env1             		= "$user$env_s1"
 
 local tex_rt_depth				= "$user$depth"
 local tex_rt_position			= "$user$position"
-local tex_rt_sceneColor			= "$user$generic0" // $user$generic0 shows weird artefacts 
+local tex_rt_sceneColor			= "$user$generic0"	
 
 function normal                	(shader, t_base, t_second, t_detail)
 
@@ -25,11 +25,12 @@ shader:begin                	("water", "water")
 	shader:sampler        		("s_base")       	:texture(tex_base)				:fmip_linear ()
 	shader:sampler        		("s_nmap")       	:texture(tex_nmap)
 	shader:sampler        		("s_wnmap")       	:texture(tex_wnmap)
-	shader:sampler        		("sky_s0")       	:texture(tex_sky0) 				: clamp()
-	shader:sampler        		("sky_s1")       	:texture(tex_sky1) 				: clamp()
+	
+	shader:sampler        		("s_specular_s0")       	:texture(tex_sky0) 				: clamp()
+	shader:sampler        		("s_specular_s1")       	:texture(tex_sky1) 				: clamp()
 	  
-	shader:sampler        		("env_s0")       	:texture(tex_env0) 				: clamp()
-	shader:sampler        		("env_s1")       	:texture(tex_env1) 				: clamp()
+	shader:sampler        		("s_diffuse_s0")       	:texture(tex_env0) 				: clamp()
+	shader:sampler        		("s_diffuse_s1")       	:texture(tex_env1) 				: clamp()
 	  
 	shader:sampler       		("s_depth") 		:texture(tex_rt_depth) 		: clamp()
 	shader:sampler       		("s_position") 		:texture(tex_rt_position) 		: clamp()

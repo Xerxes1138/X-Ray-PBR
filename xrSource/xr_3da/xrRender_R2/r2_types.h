@@ -15,8 +15,9 @@
 
 // SSR
 #define		r2_RT_SSR_Raycast				"$user$ssr_raycast"
+#define		r2_RT_SSR_Resolve				"$user$ssr_resolve"		
 #define		r2_RT_SSR_Reflection			"$user$ssr_reflection"		
-#define		r2_RT_SSR_Reflection_Previous	"$user$ssr_reflection_previous"
+#define		r2_RT_SSR_Temporal				"$user$ssr_reflection_previous"
 
 // SSGI
 #define		r2_RT_SSGI_Raycast				"$user$ssgi_raycast"

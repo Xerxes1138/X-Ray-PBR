@@ -1,0 +1,178 @@
+#include "common.h"
+#include "hmodel.h"
+
+uniform sampler2D s_currentColor;
+uniform sampler2D s_previousColor;
+
+uniform float4 dx_TAA_Jitter;
+
+float4 clip_aabb(float3 aabb_min, float3 aabb_max, float4 p, float4 q)
+{
+
+		float4 r = q - p;
+		float3 rmax = aabb_max - p.xyz;
+		float3 rmin = aabb_min - p.xyz;
+
+		const float eps = 0.00000001f;
+
+		if (r.x > rmax.x + eps)
+			r *= (rmax.x / r.x);
+		if (r.y > rmax.y + eps)
+			r *= (rmax.y / r.y);
+		if (r.z > rmax.z + eps)
+			r *= (rmax.z / r.z);
+
+		if (r.x < rmin.x - eps)
+			r *= (rmin.x / r.x);
+		if (r.y < rmin.y - eps)
+			r *= (rmin.y / r.y);
+		if (r.z < rmin.z - eps)
+			r *= (rmin.z / r.z);
+
+		return p + r;
+}
+
+struct TAAVertexOuput
+{
+	float4 tc0 : TEXCOORD0;
+};
+
+void main 
+( 
+	TAAVertexOuput I,
+	out float4 outToBuffer : COLOR0,
+	out float4 outToScreen : COLOR1
+)
+{
+	// COORD
+	float2 uv = I.tc0;
+
+	//uv -= (dx_TAA_Jitter.xy) / STALKER_SCREEN_SIZE.xy;
+	
+	float2 uvPrevious = I.tc0;
+	
+	int2 pos = uv * STALKER_SCREEN_SIZE.xy;
+	//
+	
+	// G-BUFFER
+	float4 gBuffer0 = tex2D(s_position, uv);
+		if(gBuffer0.z <= 0 ) gBuffer0.z = dx_Viewport_Params.y;
+		if(gBuffer0.w <= 0 ) gBuffer0.w = 1.0f;
+	float4 gBuffer1 = tex2D(s_normal, uv);
+	float4 gBuffer2 = tex2D(s_diffuse, uv);
+	float4 gBuffer3 = tex2D(s_specular, uv);
+	//
+	
+	GBufferData data = DataFromGBuffer(gBuffer0, gBuffer1, gBuffer2, gBuffer3);
+	
+	// DATA
+	float ambientOcclusionBaked =  1.0f /*data.occlusion*/;
+				
+	float materialID = data.materialID;
+	
+	float depth = data.depth;
+	
+	float linearDepth = gBuffer0.z;
+		
+	float3 positionView = float3(linearDepth * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), linearDepth);
+
+	float3 normalView = normalize(data.normal);
+	
+	float3 albedo = data.diffuseColor;
+	float3 specularColor = data.specularColor;
+	
+	float smoothness = data.smoothness;
+	//
+
+	// RANDOM
+	float dither =	 Dither8x8Bayer
+	(
+		fmod(pos.x, 8.0f),
+		fmod(pos.y, 8.0f)
+	);
+	
+	float4 blueNoise = tex2D(s_bluenoise, uv * (STALKER_SCREEN_SIZE.xy) / 1024);
+	
+	#ifdef STALKER_USE_STOCHASTIC_SSR
+		blueNoise.x = fmod(blueNoise.x + (GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.y = fmod(blueNoise.y + (GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.z = fmod(blueNoise.z + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+		blueNoise.w = fmod(blueNoise.w + (GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO + GOLDEN_RATIO) * (timers.x % 100), 1);
+	#endif
+	
+	float interleavedGradientNoise = InterleavedGradientNoise(pos);
+		
+	float2 rotation; 
+	sincos(blueNoise.x * STALKER_TWO_PI, rotation.x, rotation.y);
+	//
+
+	#if 1
+		float2 velocity =  tex2D(s_motionVector, uv);
+	#else
+        float4 hitPacked = tex2Dlod(s_SSGI_Raycast, float4(uv, 0.0, 0.0));
+        float2 hitUv = hitPacked.xy;
+        int2 hitPos = hitUv * STALKER_SCREEN_SIZE.xy;
+        
+        float hitZ = tex2D(s_position, hitUv).z;
+            if (hitZ <= 0) hitZ = dx_Viewport_Params.y;
+        
+        float hitPDF = hitPacked.z;
+        float hitFail = hitPacked.w;   
+
+        float3 hitPositionView = float3(hitZ * (pos * dx_Pos_Decompression_Params.zw - dx_Pos_Decompression_Params.xy), hitZ);
+
+		float4 currentClip	= mul(dx_matrix_Projection, float4(hitPositionView, 1.0f));
+		float2 current = (currentClip.xy / currentClip.w);
+		current = current * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+
+		float4 previousClip 	= mul(dx_matrix_PreviousProjection, float4(hitPositionView, 1.0f));
+		float2 previous =  (previousClip.xy / previousClip.w);
+		previous = previous * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+
+		float2 velocity = (current - previous);
+	#endif
+
+	float4 colorTemporal = tex2D(s_currentColor, uv);
+
+	#if 1
+        float4 currentColor = tex2D(s_currentColor, uv);
+
+        float4 previousColor = tex2D(s_previousColor, uvPrevious - velocity);
+		
+		float2 du = float2(STALKER_SCREEN_SIZE.z, 0.0f);
+		float2 dv = float2(0.0, STALKER_SCREEN_SIZE.w);
+
+		float4 currentTopLeft = tex2D(s_currentColor, uv.xy - dv - du);
+		float4 currentTopCenter = tex2D(s_currentColor, uv.xy - dv);
+		float4 currentTopRight = tex2D(s_currentColor, uv.xy - dv + du);
+		float4 currentMiddleLeft = tex2D(s_currentColor, uv.xy - du);
+		float4 currentMiddleCenter = tex2D(s_currentColor, uv.xy);
+		float4 currentMiddleRight = tex2D(s_currentColor, uv.xy + du);
+		float4 currentBottomLeft = tex2D(s_currentColor, uv.xy + dv - du);
+		float4 currentBottomCenter = tex2D(s_currentColor, uv.xy + dv);
+		float4 currentBottomRight = tex2D(s_currentColor, uv.xy + dv + du);
+		
+		float4 currentMin = min(currentTopLeft, min(currentTopCenter, min(currentTopRight, min(currentMiddleLeft, min(currentMiddleCenter, min(currentMiddleRight, min(currentBottomLeft, min(currentBottomCenter, currentBottomRight))))))));
+		float4 currentMax = max(currentTopLeft, max(currentTopCenter, max(currentTopRight, max(currentMiddleLeft, max(currentMiddleCenter, max(currentMiddleRight, max(currentBottomLeft, max(currentBottomCenter, currentBottomRight))))))));
+		
+		float4 currentMaxAverage = (currentTopLeft + currentTopCenter + currentTopRight + currentMiddleLeft + currentMiddleCenter + currentMiddleRight + currentBottomLeft + currentBottomCenter + currentBottomRight) / 9.0f;
+
+		float scale = 8;
+
+		float4 center = (currentMin + currentMax) * 0.5f;
+		currentMin = (currentMin - center) * scale + center;
+		currentMax = (currentMax - center) * scale + center;
+
+		previousColor = clamp(previousColor, currentMin, currentMax);
+
+		// Temporal resolve
+		colorTemporal = lerp(currentColor, previousColor, STALKER_STOCHASTIC_SSGI_TEMPORAL_RESPONSE);
+	#endif
+
+	float4 toBuffer = colorTemporal;
+
+	float4 toScreen = colorTemporal;
+
+	outToBuffer = toBuffer;
+	outToScreen = toScreen;
+}

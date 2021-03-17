@@ -328,7 +328,7 @@ void CCameraManager::Update(const Fvector& P, const Fvector& D, const Fvector& N
 	UpdateDeffered			();
 }
 
-void CCameraManager::ApplyDevice (float _viewport_near)
+void CCameraManager::ApplyDevice (float _viewport_near, bool temporalAA)
 {
 	// Device params
 	Device.mView.build_camera_dir(vPosition, vDirection, vNormal);
@@ -344,10 +344,11 @@ void CCameraManager::ApplyDevice (float _viewport_near)
 
 	Device.mProject.build_projection(deg2rad(fFov), fAspect, _viewport_near, fFar);
 
+	Device.mProjectUnJittered.set(Device.mProject);
+
 	// TAA
-	if(1)
+	if(strstr(Core.Params,"-temporalaa"))
 	{
-		Device.mProjectUnJittered.set(Device.mProject);
 		Fvector2 jitter = GenerateRandomOffset();
 		Device.vTAAJitter.set(jitter.x, jitter.y, 0.0f);
 		Device.mProject._31 += (jitter.x * 2 - 1) / Device.dwWidth;

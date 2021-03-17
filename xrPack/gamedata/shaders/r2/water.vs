@@ -34,7 +34,7 @@ vf main (v_vert v)
 
         float4         P         = v.P        ;                // world
         float3         NN         = unpack_normal        (v.N)        ;
-                P         = watermove        (P)        ;
+                //P         = watermove        (P)        ;
 
         //o.v2point        = /*mul(m_WV, P);*/P-eye_position        ;
         o.tbase = unpack_tc_base        (v.uv,v.T.w,v.B.w);                // copy tc

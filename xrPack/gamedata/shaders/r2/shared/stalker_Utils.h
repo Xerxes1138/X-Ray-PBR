@@ -1,9 +1,21 @@
 #ifndef STALKER_UTILS_H
 #define STALKER_UTILS_H
 
+float EncodeShadingModel(int shadingModel)
+{
+	return (float)shadingModel / (float)STALKER_SHADING_MODEL_NUM;
+}
+
+int DecodeShadingModel(float shadingModel)
+{
+	return int(shadingModel * (float)STALKER_SHADING_MODEL_NUM + 0.5f);
+}
+
 float Luminance(float3 rgb)
 {
-    return dot(rgb, float4(0.0396819152, 0.458021790, 0.00609653955, 1.0));
+	float3 Y = float3(0.2126f, 0.7152f, 0.0722f);
+
+    return dot(rgb, Y);
 }
 
 float3 ObjectSpaceToWorldSpaceNormal(float3 dir)
@@ -278,7 +290,10 @@ float3 RotateAroundYAxis(float3 v, float deg)
 	
 float LinearDepth(float z)
 {
-	return dx_Viewport_Params.x * dx_Viewport_Params.y / (dx_Viewport_Params.y - z * (dx_Viewport_Params.y - dx_Viewport_Params.x));
+	z = 1 - z;
+	//return dx_Viewport_Params.x * dx_Viewport_Params.y / (dx_Viewport_Params.y - z * (dx_Viewport_Params.y - dx_Viewport_Params.x));
+	
+	return dx_Viewport_Params.x * dx_Viewport_Params.y / (dx_Viewport_Params.y + z * (dx_Viewport_Params.x - dx_Viewport_Params.y));
 }
 
 float3 InverseToneMapping(float3 color)

@@ -7,7 +7,7 @@ float	hclipTAA(float v, float dim)		{ return 2.f*v/dim - 1.f; }
 
 void CRenderTarget::phase_postprocess_TAA()
 {	
-	if (1)	
+	if(RImplementation.o.temporalAA)
 	{
 		u32			Offset					= 0;
 		Fvector2	p0,p1;
@@ -95,7 +95,7 @@ void CRenderTarget::phase_postprocess_TAA()
 		CHK_DX(HW.pDevice->SetRenderState(D3DRS_ZENABLE, TRUE));
 	}
 
-	if(1)
+	if(RImplementation.o.temporalAA)
 	{
 		u32			Offset					= 0;
 		Fvector2	p0,p1;
@@ -144,7 +144,7 @@ void CRenderTarget::phase_postprocess_TAA()
 	}
 
 	// Recursive pass
-	if(1)
+	if(0)
 	{
 		u32			Offset					= 0;
 		Fvector2	p0,p1;

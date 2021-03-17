@@ -969,7 +969,7 @@
         wood\wood_wire                   = detail\detail_wood_det2, 3.000000, usage[diffuse]
         wood\wood_zabor2_iov             = detail\detail_wood_det2, 3.000000, usage[diffuse_or_bump]
         wood\wood_zabor_iov              = detail\detail_wood_det2, 3.000000, usage[diffuse_or_bump]
- 
+		
 [specification]
         $details                         = bump_mode[none], material[1.00]
         $shadertest                      = bump_mode[none], material[1.00]
@@ -1595,8 +1595,8 @@
         fx\fx_noise                      = bump_mode[none], material[1.00]
         fx\fx_noise2                     = bump_mode[none], material[1.00]
         fx\fx_oblaka                     = bump_mode[none], material[1.00]
-        fx\fx_rain                       = bump_mode[none], material[1.00]
-        fx\fx_rainsplash1                = bump_mode[none], material[1.00]
+        fx\fx_rain                       = bump_mode[use:fx\fx_rain_bump], material[1.00]
+        fx\fx_rainsplash1                = bump_mode[use:fx\fx_rainsplash1_bump], material[1.00]
         fx\fx_ring1                      = bump_mode[none], material[1.00]
         fx\fx_shadow1                    = bump_mode[none], material[1.00]
         fx\fx_shadow1a                   = bump_mode[none], material[1.00]
@@ -4105,7 +4105,7 @@
         temp\temp_nmap_                  = bump_mode[none], material[1.00]
         temp\temp_purewhite1             = bump_mode[none], material[1.00]
         temp\temp_purewhite2             = bump_mode[none], material[1.00]
-        temp\temp_raw_tex                = bump_mode[none], material[3.00]
+        temp\temp_raw_tex                = bump_mode[none], material[1.00]
         temp\temp_rost_det               = bump_mode[none], material[1.00]
         temp\temp_rost_det2              = bump_mode[none], material[1.00]
         temp\temp_wall02a                = bump_mode[none], material[1.00]

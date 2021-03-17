@@ -17,9 +17,16 @@
 #define	BIND_DECLARE(xf)	\
 class cl_xform_##xf	: public R_constant_setup {	virtual void setup (R_constant* C) { RCache.xforms.set_c_##xf (C); } }; \
 	static cl_xform_##xf	binder_##xf
+
+/*#define	BIND_DECLARE_PREVIOUS(xf)	\
+class cl_xform_previous_##xf	: public R_constant_setup {	virtual void setup (R_constant* C) { RCache.xforms.set_c_previous_##xf (C); } }; \
+	static cl_xform_previous_##xf	binder_previous_##xf*/
+
 BIND_DECLARE(w);
 BIND_DECLARE(v);
 BIND_DECLARE(p);
+/*BIND_DECLARE_PREVIOUS(v);
+BIND_DECLARE_PREVIOUS(p);*/
 BIND_DECLARE(wv);
 BIND_DECLARE(vp);
 BIND_DECLARE(wvp);
@@ -301,28 +308,85 @@ static class cl_skyParams : public R_constant_setup
 } 
 binder_skyParams;
 
-static class cl_previousProjection : public R_constant_setup
+static class cl_previous_World : public R_constant_setup
 {
     virtual void setup(R_constant* C)
 	{
-		Fmatrix		m_previous, m_current, m_currentView;
-		static Fmatrix	m_saved_viewproj;
+		Fmatrix	m_previous_W;
+		Fmatrix m_current_W;
 
-		m_currentView.set(RCache.get_xform_view());
+		static Fmatrix m_saved_m_W;
 
+		m_previous_W.set(m_saved_m_W);
+
+		m_current_W.set(RCache.get_xform_world());
+
+		m_saved_m_W.set(m_current_W);
+
+		RCache.set_c(C, m_previous_W);
+
+		//RCache.xforms.set_c_previous_v(C); 
+    }
+} 
+binder_previous_World;
+
+static class cl_previous_View : public R_constant_setup
+{
+    virtual void setup(R_constant* C)
+	{
+		Fmatrix	m_previous_V;
+		Fmatrix m_current_V;
+
+		static Fmatrix m_saved_m_V;
+
+		m_previous_V.set(m_saved_m_V);
+
+		//m_current_V.mul_43(RCache.get_xform_view(), RCache.get_xform_world());
+		m_current_V.set(RCache.get_xform_view());
+
+		m_saved_m_V.set(m_current_V);
+
+		RCache.set_c(C, m_previous_V);
+
+		//RCache.xforms.set_c_previous_v(C); 
+    }
+} 
+binder_previous_View;
+
+static class cl_previous_Projection : public R_constant_setup
+{
+    virtual void setup(R_constant* C)
+	{
+		/*Fmatrix m_previous_P;
+		Fmatrix m_current_P;
+
+		static Fmatrix m_saved_m_P;
+
+		m_previous_P.set(m_saved_m_P);
+
+		m_current_P.set(RCache.get_xform_project());
+
+		m_saved_m_P.set(m_current_P);
+
+        RCache.set_c(C, m_previous_P);*/
+		//RCache.xforms.set_c_previous_p(C); 
+
+		Fmatrix		m_previous, m_current;
+
+		static Fmatrix		m_saved_viewproj;
+		
 		Fmatrix	m_invview;
-		m_invview.invert(m_currentView);
+		m_invview.invert(RCache.get_xform_view());
 
 		m_previous.mul(m_saved_viewproj, m_invview);
 
 		m_current.set(RCache.get_xform_project());
 
-		m_saved_viewproj.mul(m_current, m_currentView);
-
-        RCache.set_c(C, m_previous);
+		m_saved_viewproj.mul(Device.mProjectUnJittered, Device.mView);
+		 RCache.set_c(C, m_previous);
     }
 } 
-binder_previousProjection;
+binder_previous_Projection;
 
 // Standart constant-binding
 void	CBlender_Compile::SetMapping	()
@@ -331,10 +395,14 @@ void	CBlender_Compile::SetMapping	()
 	r_Constant				("m_W",				&binder_w);
 	r_Constant				("m_V",				&binder_v);
 	r_Constant				("m_P",				&binder_p);
-	r_Constant				("m_previous_P",	&binder_previousProjection);
+
 	r_Constant				("m_WV",			&binder_wv);
 	r_Constant				("m_VP",			&binder_vp);
 	r_Constant				("m_WVP",			&binder_wvp);
+
+	r_Constant				("m_previous_W",	&binder_previous_World);
+	r_Constant				("m_previous_V",	&binder_previous_View);
+	r_Constant				("m_previous_P",	&binder_previous_Projection);
 
 	// fog-params
 	r_Constant				("fog_plane",		&binder_fog_plane);

@@ -40,42 +40,6 @@ float3 MultiBounce(float AO, float3 Albedo)
 	return max(AO, ((AO * A + B) * AO + C) * AO);
 }
 
-void ComputeImageBasedLighting(out float3 diffuseIBL, out float3 specularIBL, float3 N, float3 V, float4 blendFactor, float mip)
-{
-	float3 F = 1.0f;
-	float3 R = reflect(V, N);
-	
-	R = RotateAroundYAxis(R, dx_SkyRotation.x);
-	V = RotateAroundYAxis(V, dx_SkyRotation.x);
-	N = RotateAroundYAxis(N, dx_SkyRotation.x);
-
-	#ifdef STALKER_LEGACY	
-		half3 diffuseCube0 = texCUBElod(s_diffuse_s0, float4(N, 0));
-		half3 diffuseCube1 = texCUBElod(s_diffuse_s1, float4(N, 0));
-
-		diffuseIBL = accurateSRGBToLinear(blendFactor.rgb * lerp(diffuseCube0, diffuseCube1, blendFactor.a));
-		
-		half3 specularCube0 = texCUBElod(s_specular_s0, float4(R, mip));
-		half3 specularCube1 = texCUBElod(s_specular_s1, float4(R, mip));
-
-		specularIBL = accurateSRGBToLinear(blendFactor.rgb * lerp(specularCube0, specularCube1, blendFactor.a));
-	#else
-		half3 diffuseCube0 = texCUBElod(s_diffuse_s0, float4(N, 0));
-		half3 diffuseCube1 = texCUBElod(s_diffuse_s1, float4(N, 0));
-
-		half3 skyColor = half3(0.25f, 0.5f, 1.0f);
-		half3 groundColor = half3(0.1f, 0.125f, 0.0f);
-		half3 hemisphereLight = lerp(groundColor, skyColor, N.y * 0.5f + 0.5f);
-		
-		diffuseIBL = blendFactor.rgb * lerp(diffuseCube0, diffuseCube1, blendFactor.a);
-		
-		half3 specularCube0 = texCUBElod(s_specular_s0, float4(R, mip));
-		half3 specularCube1 = texCUBElod(s_specular_s1, float4(R, mip));
-
-		specularIBL = blendFactor.rgb * lerp(specularCube0, specularCube1, blendFactor.a);
-	#endif
-}
-
 void ComputeImageBasedLighting(out float3 diffuseIBL, out float3 specularIBL, float3 N, float3 V, float4 blendFactor, float3 diffuseColor, float smoothness, float ambientOcclusion)
 {
 	float3 R = reflect(V, N);

@@ -1,68 +1,35 @@
-#include "common.h"
+#define USE_AREF
 
-struct        v_vert
+#include	"common.h"
+
+VertexOutput_FORWARD main(VertexInput_Model v)
 {
-        float4 P        : POSITION;
-        float4 N        : NORMAL;   
-        float4 T        : TANGENT;
-        float4 B        : BINORMAL;
-        float4 color        : COLOR0; 
-        float2 uv : TEXCOORD0;
-};
+	float4 vertex = mul(m_WVP, v.position);
+	float3 positionWorld = mul(m_W, half4(v.position.xyz, 1.0f));
+    float3 normalWorld = normalize(mul((float3x3)m_W, unpack_bx2(v.normal.xyz))); //ObjectSpaceToWorldSpaceNormal(v.normal * 2.0f - 1.0f);
 
-struct   vf
-{
-        float4         hpos        :         POSITION        ;
-        float2  tbase        :        TEXCOORD0        ;
-        float3         M1                :        TEXCOORD3        ;
-        float3         M2                :        TEXCOORD4        ;
-        float3         M3                :        TEXCOORD5        ;
-        float4        c0                :          COLOR0                ;
-        float          fog        :         FOG                ;
-		float4          screenPos        :         TEXCOORD7                ;
-		float3          positionWorld       :         TEXCOORD6               ;
-};
+    #ifdef USE_AREF
+	    float4 positionScreen = ComputeScreenPos(vertex);
+    #endif
 
-vf main(v_vert v)
-{
-        vf                 o;
+	float2 textureCoord = v.textureCoord.xy;
 
-        float4 P = v.P;
-
-        o.tbase = v.uv; 
-		
-		float3 positionWorld = mul(m_W, half4(P.xyz, 1.0f)); 
-		
-		o.positionWorld = positionWorld;
-
-		float3 normal = normalize(mul((float3x3)m_W, unpack_bx2(v.N.xyz)));
-		float3 tangent = normalize(mul((float3x3)m_W, unpack_bx2(v.T.xyz)));
-		float sign = v.T.w;
-		float3 binormal = normalize(cross(normal, tangent) * sign);
-
-        o.M1                 = tangent;
-        o.M2                 = binormal;
-        o.M3                 = normal;
-
-        o.hpos = mul(m_WVP, P);
-		
-		float3 positionView = mul(m_WV, P);
-		
-		float fogHeight = ComputeHeightFog(positionWorld, eye_position, dx_WeatherParams.x);
+    VertexOutput_FORWARD vertexOuput = (VertexOutput_FORWARD) 0;
+    vertexOuput.vs_vertex = vertex;
+    vertexOuput.vs_textureCoord = textureCoord;
 	
-		#if 0
-			float fog = saturate(ComputeLegacyFog(positionView) * fogHeight);
-		#else
-			float fog = saturate(ComputeExponentialFog(positionView) * fogHeight);
-		#endif
-		
-		
-		o.fog       = fog;
-
-		o.c0		= v.color;
-		
-		o.screenPos = ComputeScreenPos(o.hpos);
-		o.screenPos.z = mul(m_V, P).z;
-			
-        return o;
+	#if defined(USE_R2_STATIC_SUN) && !defined(USE_LM_HEMI)
+	    vertexOuput.vs_textureCoord.w	= v.color.w;
+    #endif
+	
+    vertexOuput.vs_positionWorld = positionWorld;
+	vertexOuput.vs_normalWorld = normalWorld;
+	
+	#ifdef USE_AREF
+		vertexOuput.vs_positionScreen = positionScreen;
+    #endif
+	
+    return vertexOuput;
 }
+
+
