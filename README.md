@@ -3,7 +3,7 @@
 An attempt at converting X-Ray 1.0 engine (SoC) to PBR(ish).
 
 # FEATURES
-* SSAO (Crytek)
+* SSAO (Crytek) or Raymarched AO
 * Stochastic Screen Space Reflection
 * Screen Space SubSurface Scattering
 * Temporal AA
@@ -16,3 +16,6 @@ An attempt at converting X-Ray 1.0 engine (SoC) to PBR(ish).
 - Temporal AA ghosting with moving objects
 - Depth issues when camera intersect walls or collide with invisible trigger objects
 
+# COMMANDs
+
+Add -sjitter and -temporalaa to your "XR_3DA.exe" shortcut to enable soft shadows and temporalAA.
